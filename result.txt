@@ -1,0 +1,222 @@
+
+====================== GLOBAL SUMMARY ======================
+Courses in course_list.csv      : 97
+Lecture sections (no labs)      : 40
+Lab sections                    : 29
+Unique assigned faculty (≠ TBA) : 19
+============================================================
+
+================ COURSE SECTION COUNTS (LEC vs LAB) ================
+COMP1000: 1 lecture section(s), 1 lab section(s)
+COMP1050: 1 lecture section(s), 1 lab section(s)
+COMP2000: 1 lecture section(s), 1 lab section(s)
+COMP2350: 1 lecture section(s), 1 lab section(s)
+COMP2500: 1 lecture section(s), 1 lab section(s)
+COMP3220: 1 lecture section(s), 1 lab section(s)
+COMP3230: 1 lecture section(s), 1 lab section(s)
+COMP3350: 4 lecture section(s), 4 lab section(s)
+COMP3400: 1 lecture section(s), 1 lab section(s)
+COMP3450: 4 lecture section(s), 4 lab section(s)
+COMP3500: 1 lecture section(s), 1 lab section(s)
+COMP3510: 1 lecture section(s), 1 lab section(s)
+COMP3550: 2 lecture section(s), 2 lab section(s)
+COMP3575: 1 lecture section(s), 1 lab section(s)
+COMP3590: 2 lecture section(s), 2 lab section(s)
+COMP3650: 1 lecture section(s), 1 lab section(s)
+COMP3725: 1 lecture section(s), no labs
+COMP3800: 1 lecture section(s), no labs
+COMP4450: 1 lecture section(s), 1 lab section(s)
+COMP4550: 2 lecture section(s), 2 lab section(s)
+COMP4650: 1 lecture section(s), 1 lab section(s)
+COMP4700: 1 lecture section(s), 1 lab section(s)
+COMP5500: 4 lecture section(s), no labs
+COMP5555: 1 lecture section(s), no labs
+COMP5700: 1 lecture section(s), no labs
+COMP6420: 1 lecture section(s), no labs
+COMP7100: 1 lecture section(s), no labs
+DATA6100: 1 lecture section(s), no labs
+====================================================================
+
+=================== GRADUATE CLASS TIMINGS (5000+) ==================
+
+COMP5500:
+  - COMP5500-2 [LEC] MW 17:15-18:30 | faculty=Yetunde | room=KNGMN 201
+  - COMP5500-3 [LEC] TTh 17:15-18:30 | faculty=Salem | room=ANXCN 014
+  - COMP5500-1 [LEC] WF 17:15-18:30 | faculty=Memo | room=ANXCN 014
+  - COMP5500-4 [LEC] WF 17:15-18:30 | faculty=Bingyu | room=DOBBS 302
+
+COMP5555:
+  - COMP5555-1 [LEC] MW 17:15-18:30 | faculty=Abdullah | room=BEATT 419
+
+COMP5700:
+  - COMP5700-1 [LEC] TTh 17:15-19:50 | faculty=Frank | room=KNGMN 201
+
+COMP6420:
+  - COMP6420-1 [LEC] WF 17:15-18:30 | faculty=Leon | room=DOBBS 310
+
+COMP7100:
+  - COMP7100-1 [LEC] MW 17:15-18:30 | faculty=Salem | room=WATSN 006
+
+DATA6100:
+  - DATA6100-1 [LEC] TTh 17:15-18:30 | faculty=Sunjae | room=DOBBS 302
+====================================================================
+
+====================== SECTIONS WITH TBA FACULTY ======================
+No sections with TBA faculty.
+====================================================================
+
+================== FACULTY TEACHING ASSIGNMENTS ==================
+
+Abdullah: 5 section(s) [lec load=3, target=3]
+  - COMP3350-3: COMP3350 (LEC) TTh 08:00-09:15 in KNGMN 201
+  - COMP3350-3-LAB: COMP3350 (LAB) F 08:00-09:45 in WATSN 001
+  - COMP3450-3: COMP3450 (LEC) MW 08:00-09:15 in WATSN 006
+  - COMP3450-3-LAB: COMP3450 (LAB) F 10:00-11:45 in DOBBS 203
+  - COMP5555-1: COMP5555 (LEC) MW 17:15-18:30 in BEATT 419
+
+Ashar: 6 section(s) [lec load=3, target=3]
+  - COMP3550-1: COMP3550 (LEC) TTh 08:00-09:15 in BEATT 419
+  - COMP3550-1-LAB: COMP3550 (LAB) F 08:00-09:45 in BEATT 420
+  - COMP3550-2: COMP3550 (LEC) WF 10:00-11:45 in KNGMN 201
+  - COMP3550-2-LAB: COMP3550 (LAB) M 08:00-09:45 in WATSN 004
+  - COMP3575-1: COMP3575 (LEC) MW 12:30-13:45 in ANXCN 014
+  - COMP3575-1-LAB: COMP3575 (LAB) F 13:00-14:45 in WILLS 204
+
+Aspen: 4 section(s) [lec load=2, target=3]
+  - COMP3350-1: COMP3350 (LEC) WF 08:00-09:15 in KNGMN 201
+  - COMP3350-1-LAB: COMP3350 (LAB) M 08:00-09:45 in DOBBS 203
+  - COMP4650-1: COMP4650 (LEC) MW 10:00-11:45 in WATSN 002
+  - COMP4650-1-LAB: COMP4650 (LAB) F 10:00-11:45 in ANXCN 203
+
+Barry: 2 section(s) [lec load=1, target=1]
+  - COMP3450-1: COMP3450 (LEC) TTh 08:00-09:15 in DOBBS 302
+  - COMP3450-1-LAB: COMP3450 (LAB) F 08:00-09:45 in WATSN 006
+
+Bingyu: 3 section(s) [lec load=2, target=3]
+  - COMP3590-1: COMP3590 (LEC) TTh 08:00-09:15 in WATSN 004
+  - COMP3590-1-LAB: COMP3590 (LAB) F 08:00-09:45 in ANXCN 306
+  - COMP5500-4: COMP5500 (LEC) WF 17:15-18:30 in DOBBS 302
+
+Cliff: 4 section(s) [lec load=2, target=3]
+  - COMP2500-1: COMP2500 (LEC) MW 09:30-10:45 in ANXCN 203
+  - COMP2500-1-LAB: COMP2500 (LAB) F 13:00-14:45 in DOBBS 308
+  - COMP3510-1: COMP3510 (LEC) MW 08:00-09:15 in ANXCN 107
+  - COMP3510-1-LAB: COMP3510 (LAB) F 08:00-09:45 in WATSN 004
+
+Dave: 4 section(s) [lec load=2, target=3]
+  - COMP1050-1: COMP1050 (LEC) MW 08:00-09:15 in WATSN 002
+  - COMP1050-1-LAB: COMP1050 (LAB) F 10:00-11:45 in DOBBS 302
+  - COMP2000-1: COMP2000 (LEC) TTh 08:00-09:15 in WENTW 010
+  - COMP2000-1-LAB: COMP2000 (LAB) F 13:00-14:45 in BEATT 420
+
+Fariba: 1 section(s) [lec load=1, target=1]
+  - COMP3725-1: COMP3725 (LEC) TTh 15:00-17:15 in ANXCN 014
+
+Frank: 3 section(s) [lec load=2, target=3]
+  - COMP3350-2: COMP3350 (LEC) MW 08:00-09:15 in DOBBS 302
+  - COMP3350-2-LAB: COMP3350 (LAB) F 08:00-09:45 in DOBBS 310
+  - COMP5700-1: COMP5700 (LEC) TTh 17:15-19:50 in KNGMN 201
+
+Irfan: 4 section(s) [lec load=2, target=4]
+  - COMP3500-1: COMP3500 (LEC) WF 08:00-09:15 in WENTW 010
+  - COMP3500-1-LAB: COMP3500 (LAB) M 08:00-09:45 in DOBBS 306
+  - COMP3650-1: COMP3650 (LEC) MW 10:00-11:45 in DOBBS 302
+  - COMP3650-1-LAB: COMP3650 (LAB) F 10:00-11:45 in WILLS 204
+
+Kene: 4 section(s) [lec load=2, target=4]
+  - COMP3400-1: COMP3400 (LEC) MW 08:00-09:15 in DOBBS 310
+  - COMP3400-1-LAB: COMP3400 (LAB) F 08:00-09:45 in DOBBS 306
+  - COMP4550-2: COMP4550 (LEC) WF 10:00-11:45 in WATSN 006
+  - COMP4550-2-LAB: COMP4550 (LAB) M 10:00-11:45 in DOBBS 203
+
+Leon: 3 section(s) [lec load=2, target=3]
+  - COMP3590-2: COMP3590 (LEC) WF 08:00-09:15 in BEATT 403
+  - COMP3590-2-LAB: COMP3590 (LAB) M 08:00-09:45 in WENTW 010
+  - COMP6420-1: COMP6420 (LEC) WF 17:15-18:30 in DOBBS 310
+
+Memo: 3 section(s) [lec load=2, target=3]
+  - COMP2350-1: COMP2350 (LEC) WF 09:30-10:45 in ANXCN 103
+  - COMP2350-1-LAB: COMP2350 (LAB) M 08:00-09:45 in ANXCN 101
+  - COMP5500-1: COMP5500 (LEC) WF 17:15-18:30 in ANXCN 014
+
+Micah: 6 section(s) [lec load=3, target=3]
+  - COMP3230-1: COMP3230 (LEC) TTh 08:00-09:15 in ANXCN 014
+  - COMP3230-1-LAB: COMP3230 (LAB) F 08:00-09:45 in WILLS 204
+  - COMP3450-2: COMP3450 (LEC) WF 10:00-11:45 in ANXCN 014
+  - COMP3450-2-LAB: COMP3450 (LAB) M 08:00-09:45 in WATSN 001
+  - COMP3450-4: COMP3450 (LEC) TTh 09:30-10:45 in ANXCN 014
+  - COMP3450-4-LAB: COMP3450 (LAB) F 13:00-14:45 in DOBBS 203
+
+Salem: 4 section(s) [lec load=3, target=3]
+  - COMP3220-1: COMP3220 (LEC) MW 08:00-09:15 in ANXCN 014
+  - COMP3220-1-LAB: COMP3220 (LAB) F 08:00-09:45 in DOBBS 203
+  - COMP5500-3: COMP5500 (LEC) TTh 17:15-18:30 in ANXCN 014
+  - COMP7100-1: COMP7100 (LEC) MW 17:15-18:30 in WATSN 006
+
+Steve: 1 section(s) [lec load=1, target=1]
+  - COMP3800-1: COMP3800 (LEC) WF 15:00-17:15 in ONLINE
+
+Sunjae: 5 section(s) [lec load=3, target=3]
+  - COMP3350-4: COMP3350 (LEC) WF 08:00-09:15 in BEATT 419
+  - COMP3350-4-LAB: COMP3350 (LAB) M 08:00-09:45 in WILLS 204
+  - COMP4450-1: COMP4450 (LEC) MW 10:00-11:45 in BEATT 419
+  - COMP4450-1-LAB: COMP4450 (LAB) F 10:00-11:45 in DOBBS 310
+  - DATA6100-1: DATA6100 (LEC) TTh 17:15-18:30 in DOBBS 302
+
+Weijie: 4 section(s) [lec load=2, target=3]
+  - COMP1000-1: COMP1000 (LEC) WF 10:00-11:45 in BEATT 402
+  - COMP1000-1-LAB: COMP1000 (LAB) M 08:00-09:45 in RBSTN 103
+  - COMP4550-1: COMP4550 (LEC) TTh 08:00-09:15 in DOBBS 310
+  - COMP4550-1-LAB: COMP4550 (LAB) F 08:00-09:45 in WILLS 105
+
+Yetunde: 3 section(s) [lec load=2, target=3]
+  - COMP4700-1: COMP4700 (LEC) TTh 08:00-09:15 in WATSN 006
+  - COMP4700-1-LAB: COMP4700 (LAB) F 10:00-11:45 in WATSN 001
+  - COMP5500-2: COMP5500 (LEC) MW 17:15-18:30 in KNGMN 201
+
+=================================================================
+
+====================== SLOT UTILIZATION BY DAY ======================
+
+M:
+  08:00-09:15: 6 section(s)
+  08:00-09:45: 8 section(s)
+  09:30-10:45: 1 section(s)
+  10:00-11:45: 4 section(s)
+  12:30-13:45: 1 section(s)
+  17:15-18:30: 3 section(s)
+
+T:
+  08:00-09:15: 8 section(s)
+  09:30-10:45: 1 section(s)
+  15:00-17:15: 1 section(s)
+  17:15-18:30: 2 section(s)
+  17:15-19:50: 1 section(s)
+
+W:
+  08:00-09:15: 10 section(s)
+  09:30-10:45: 2 section(s)
+  10:00-11:45: 7 section(s)
+  12:30-13:45: 1 section(s)
+  15:00-17:15: 1 section(s)
+  17:15-18:30: 6 section(s)
+
+Th:
+  08:00-09:15: 8 section(s)
+  09:30-10:45: 1 section(s)
+  15:00-17:15: 1 section(s)
+  17:15-18:30: 2 section(s)
+  17:15-19:50: 1 section(s)
+
+F:
+  08:00-09:15: 4 section(s)
+  08:00-09:45: 10 section(s)
+  09:30-10:45: 1 section(s)
+  10:00-11:45: 10 section(s)
+  13:00-14:45: 4 section(s)
+  15:00-17:15: 1 section(s)
+  17:15-18:30: 3 section(s)
+====================================================================
+
+✅ Exported 109 events to schedule.json
+✅ Exported Excel-style CSV to schedule.csv

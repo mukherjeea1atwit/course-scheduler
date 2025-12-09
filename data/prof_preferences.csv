@@ -1,0 +1,84 @@
+Course Number,Course Name,Faculty
+COMP1000,Computer Science 1,"Sunjae, Micah, Weijie, Abdullah, Memo, Kene"
+COMP1010,Fundamentals of IT,"Cliff, Abdullah, Irfan, Kene"
+COMP1050,Computer Science 2,"Dave, Yetunde, Micah, Abdullah, Kene"
+COMP1100,Intro to Networks,"Bingyu,  Aspen, Leon, Aspen, Abdullah, Irfan, Cliff"
+COMP1150,Routing and Switching,"Abdullah, Irfan, Kene"
+COMP1200,Computer Organization,"Sunjae, Abdullah, Irfan, Memo"
+COMP2000,Data Structures,"Frank, Bingyu, Dave, Abdullah"
+COMP2010,Systems Analysis & Design,Irfan
+COMP2100,Network Programming,"Aspen,Salem, Cliff, Kene"
+COMP2150,Network Administration,"Bingyu, Irfan"
+COMP2160,Wireless Networks,Cliff
+COMP2350,Algorithms,"Aspen, Bingyu, Frank, Salem, Memo"
+COMP2500,Security Principles,"Ashar, Bingyu, Abdullah, Irfan, Cliff"
+COMP2540,Ethical Hacking,
+COMP2650,Database,Aspen
+COMP3000,Applications of AI,Memo
+COMP3010,IT SW devel. & Mgmnt.,"Salem, Weijie, Irfan"
+COMP3100,System Administration,"Leon, Ashar"
+COMP 3125,Data Science Fundamentals,"Weijie, Memo"
+COMP3200,Assembly Language,"Abdullah, Memo"
+COMP3220,Data Analytics,"Salem, Weijie, Fariba, Memo"
+COMP3225,Game Development,Micah
+COMP3230,Game Engine Development,Micah
+COMP3350,Programming Languages,"Aspen, Frank, Abdullah, Sunjae"
+COMP3400,Operating Systems,"Aspen, Abdullah, Sunjae, Kene, Irfan, Memo"
+COMP3450,Parallel & Distributed Computing,"Micah, Abdullah, Barry"
+COMP3480,Cloud Computing,Aspen
+COMP3500,Network Security,"Abdullah, Irfan, Cliff"
+COMP3510,IoT Security,"Irfan, Cliff"
+COMP3550,Computer Security,"Ashar, Abdullah, Irfan"
+COMP3575,Scripting for Cybersecurity & Forensics,Ashar
+COMP3580,Digital Forensics,Ashar
+COMP3590,Applied Cryptography,"Ashar, Bingyu, Abdullah, Leon, Cliff"
+COMP3600,Software Security,Aspen
+COMP3650,Malware Analysis Basics,"Abdullah, Irfan"
+COMP3660,Mobile App Development,Abdullah
+COMP3725,Social Network Analysis,
+COMP4060,Blockchain Technologies,Bingyu
+COMP4150,Adv. Systems Administration,
+COMP4225,Game Design Projects,"Yetunde, Micah"
+COMP4450,Systems Programming,Sunjae
+COMP4460,Compilers,Sunjae
+COMP4500,Offensive Security,"Ashar, Abdullah"
+COMP4550,Incident Response & Business Cont.,Ashar
+COMP4580,Network Forensics,
+COMP4590,Public Key Cryptography,"Bingyu, Leon, Cliff"
+COMP4600,Quantum Computing for Security,Leon
+COMP4650,Web Development,"Aspen, Salem, Abdullah, Irfan, Kene"
+COMP4700,Artificial Intelligence,"Yetunde, Salem, Frank, Memo"
+COMP4725,Big Data Programming,Salem
+COMP4750,Embedded AI,"Irfan, Memo"
+COMP4760,Image Processing,Memo
+COMP4770,AI for Gaming,Yetunde
+COMP4775,Adv. Parallel Computing,Micah
+COMP4950,Project Management,"Aspen, Memo"
+COMP4960,Software Engineering,Memo
+COMP5050,Modern Computing,"Salem, Ashar, Leon, Memo"
+COMP5100,Natural Language Processing,"Yetunde, Salem, Memo"
+COMP5500,Senior Project,"Yetunde, Salem, Aspen, Bingyu, Leon, Abdullah, Memo"
+COMP5555,Computer & Network Security,Abdullah
+COMP5600,Foundations of Cybersecurity,"Bingyu, Irfan, Cliff"
+COMP5620,Data Privacy & Security,"Bingyu, Cliff"
+COMP5700,Classical Artificial Intelligence,"Frank, Abdullah, Memo"
+COMP5705,Data Mining,"Salem, Memo"
+COMP5710,Principles of Machine Learning,"Salem, Aspen, Steve, Abdullah, Memo"
+COMP5750,Embedded AI,Memo
+COMP5775,Adv. Parallel Computing,Micah
+COMP5900,Programming Fundamentals,Micah
+COMP5925,Data Structures & Algorithms,"Salem, Frank"
+COMP6000,Intrusion Det. & Prev. Systems,Abdullah
+COMP6100,Secure Software Development,Aspen
+COMP6420,Reverse Engineering,Abdullah
+COMP6500,Adv. Network Security,Cliff
+COMP6520,Malware Analysis,Abdullah
+COMP6550,Threat Intelligence,Abdullah 
+COMP6580,Digital For. & Incidence Response,Ashar
+COMP6760,Computer Vision,Memo
+COMP6999,Tech. Projects Development,"Yetunde, Memo"
+COMP7025,Sports Analytics,Barry
+COMP7100,Adv. Algorithms,"Salem, Frank"
+COMP7350,Big Data Systems,Salem
+COMP7430,Prompt Engineering,"Yetunde, Memo"
+COMP7431,Adv. Software Engineering,

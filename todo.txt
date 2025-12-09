@@ -1,0 +1,9 @@
+- Professor priority class choosing tier (for better class assignment) - make an RNG at the start
+- Room preferences in future
+- Wednesday is currently overloaded being the only day that appears twice - (MW & WF); adding ["T", "F"] will help
+- Last semester's raw data & final schedule (for testing)
+- Handling requisites & co-requisites
+- testing: suggested student schedules
+
+
+- T & Th 12 - 1.30 reserved

@@ -1,0 +1,1092 @@
+[
+  {
+    "id": "COMP1000-1",
+    "day": "W",
+    "course": "COMP1000",
+    "prof": "Weijie",
+    "room": "BEATT 402",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP1000-1",
+    "day": "F",
+    "course": "COMP1000",
+    "prof": "Weijie",
+    "room": "BEATT 402",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP1000-1-LAB",
+    "day": "M",
+    "course": "COMP1000",
+    "prof": "Weijie",
+    "room": "RBSTN 103",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP1050-1",
+    "day": "M",
+    "course": "COMP1050",
+    "prof": "Dave",
+    "room": "WATSN 002",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP1050-1",
+    "day": "W",
+    "course": "COMP1050",
+    "prof": "Dave",
+    "room": "WATSN 002",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP1050-1-LAB",
+    "day": "F",
+    "course": "COMP1050",
+    "prof": "Dave",
+    "room": "DOBBS 302",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP2000-1",
+    "day": "T",
+    "course": "COMP2000",
+    "prof": "Dave",
+    "room": "WENTW 010",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP2000-1",
+    "day": "Th",
+    "course": "COMP2000",
+    "prof": "Dave",
+    "room": "WENTW 010",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP2000-1-LAB",
+    "day": "F",
+    "course": "COMP2000",
+    "prof": "Dave",
+    "room": "BEATT 420",
+    "start": "13:00",
+    "end": "14:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP2350-1",
+    "day": "W",
+    "course": "COMP2350",
+    "prof": "Memo",
+    "room": "ANXCN 103",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP2350-1",
+    "day": "F",
+    "course": "COMP2350",
+    "prof": "Memo",
+    "room": "ANXCN 103",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP2350-1-LAB",
+    "day": "M",
+    "course": "COMP2350",
+    "prof": "Memo",
+    "room": "ANXCN 101",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP2500-1",
+    "day": "M",
+    "course": "COMP2500",
+    "prof": "Cliff",
+    "room": "ANXCN 203",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP2500-1",
+    "day": "W",
+    "course": "COMP2500",
+    "prof": "Cliff",
+    "room": "ANXCN 203",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP2500-1-LAB",
+    "day": "F",
+    "course": "COMP2500",
+    "prof": "Cliff",
+    "room": "DOBBS 308",
+    "start": "13:00",
+    "end": "14:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3220-1",
+    "day": "M",
+    "course": "COMP3220",
+    "prof": "Salem",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3220-1",
+    "day": "W",
+    "course": "COMP3220",
+    "prof": "Salem",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3220-1-LAB",
+    "day": "F",
+    "course": "COMP3220",
+    "prof": "Salem",
+    "room": "DOBBS 203",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3230-1",
+    "day": "T",
+    "course": "COMP3230",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3230-1",
+    "day": "Th",
+    "course": "COMP3230",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3230-1-LAB",
+    "day": "F",
+    "course": "COMP3230",
+    "prof": "Micah",
+    "room": "WILLS 204",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3350-1",
+    "day": "W",
+    "course": "COMP3350-1",
+    "prof": "Aspen",
+    "room": "KNGMN 201",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-1",
+    "day": "F",
+    "course": "COMP3350-1",
+    "prof": "Aspen",
+    "room": "KNGMN 201",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-1-LAB",
+    "day": "M",
+    "course": "COMP3350-1",
+    "prof": "Aspen",
+    "room": "DOBBS 203",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3350-2",
+    "day": "M",
+    "course": "COMP3350-2",
+    "prof": "Frank",
+    "room": "DOBBS 302",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-2",
+    "day": "W",
+    "course": "COMP3350-2",
+    "prof": "Frank",
+    "room": "DOBBS 302",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-2-LAB",
+    "day": "F",
+    "course": "COMP3350-2",
+    "prof": "Frank",
+    "room": "DOBBS 310",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3350-3",
+    "day": "T",
+    "course": "COMP3350-3",
+    "prof": "Abdullah",
+    "room": "KNGMN 201",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-3",
+    "day": "Th",
+    "course": "COMP3350-3",
+    "prof": "Abdullah",
+    "room": "KNGMN 201",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-3-LAB",
+    "day": "F",
+    "course": "COMP3350-3",
+    "prof": "Abdullah",
+    "room": "WATSN 001",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3350-4",
+    "day": "W",
+    "course": "COMP3350-4",
+    "prof": "Sunjae",
+    "room": "BEATT 419",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-4",
+    "day": "F",
+    "course": "COMP3350-4",
+    "prof": "Sunjae",
+    "room": "BEATT 419",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3350-4-LAB",
+    "day": "M",
+    "course": "COMP3350-4",
+    "prof": "Sunjae",
+    "room": "WILLS 204",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3400-1",
+    "day": "M",
+    "course": "COMP3400",
+    "prof": "Kene",
+    "room": "DOBBS 310",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3400-1",
+    "day": "W",
+    "course": "COMP3400",
+    "prof": "Kene",
+    "room": "DOBBS 310",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3400-1-LAB",
+    "day": "F",
+    "course": "COMP3400",
+    "prof": "Kene",
+    "room": "DOBBS 306",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3450-1",
+    "day": "T",
+    "course": "COMP3450-1",
+    "prof": "Barry",
+    "room": "DOBBS 302",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-1",
+    "day": "Th",
+    "course": "COMP3450-1",
+    "prof": "Barry",
+    "room": "DOBBS 302",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-1-LAB",
+    "day": "F",
+    "course": "COMP3450-1",
+    "prof": "Barry",
+    "room": "WATSN 006",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3450-2",
+    "day": "W",
+    "course": "COMP3450-2",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-2",
+    "day": "F",
+    "course": "COMP3450-2",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-2-LAB",
+    "day": "M",
+    "course": "COMP3450-2",
+    "prof": "Micah",
+    "room": "WATSN 001",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3450-3",
+    "day": "M",
+    "course": "COMP3450-3",
+    "prof": "Abdullah",
+    "room": "WATSN 006",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-3",
+    "day": "W",
+    "course": "COMP3450-3",
+    "prof": "Abdullah",
+    "room": "WATSN 006",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-3-LAB",
+    "day": "F",
+    "course": "COMP3450-3",
+    "prof": "Abdullah",
+    "room": "DOBBS 203",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3450-4",
+    "day": "T",
+    "course": "COMP3450-4",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-4",
+    "day": "Th",
+    "course": "COMP3450-4",
+    "prof": "Micah",
+    "room": "ANXCN 014",
+    "start": "09:30",
+    "end": "10:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3450-4-LAB",
+    "day": "F",
+    "course": "COMP3450-4",
+    "prof": "Micah",
+    "room": "DOBBS 203",
+    "start": "13:00",
+    "end": "14:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3500-1",
+    "day": "W",
+    "course": "COMP3500",
+    "prof": "Irfan",
+    "room": "WENTW 010",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3500-1",
+    "day": "F",
+    "course": "COMP3500",
+    "prof": "Irfan",
+    "room": "WENTW 010",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3500-1-LAB",
+    "day": "M",
+    "course": "COMP3500",
+    "prof": "Irfan",
+    "room": "DOBBS 306",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3510-1",
+    "day": "M",
+    "course": "COMP3510",
+    "prof": "Cliff",
+    "room": "ANXCN 107",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3510-1",
+    "day": "W",
+    "course": "COMP3510",
+    "prof": "Cliff",
+    "room": "ANXCN 107",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3510-1-LAB",
+    "day": "F",
+    "course": "COMP3510",
+    "prof": "Cliff",
+    "room": "WATSN 004",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3550-1",
+    "day": "T",
+    "course": "COMP3550-1",
+    "prof": "Ashar",
+    "room": "BEATT 419",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3550-1",
+    "day": "Th",
+    "course": "COMP3550-1",
+    "prof": "Ashar",
+    "room": "BEATT 419",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3550-1-LAB",
+    "day": "F",
+    "course": "COMP3550-1",
+    "prof": "Ashar",
+    "room": "BEATT 420",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3550-2",
+    "day": "W",
+    "course": "COMP3550-2",
+    "prof": "Ashar",
+    "room": "KNGMN 201",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3550-2",
+    "day": "F",
+    "course": "COMP3550-2",
+    "prof": "Ashar",
+    "room": "KNGMN 201",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3550-2-LAB",
+    "day": "M",
+    "course": "COMP3550-2",
+    "prof": "Ashar",
+    "room": "WATSN 004",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3575-1",
+    "day": "M",
+    "course": "COMP3575",
+    "prof": "Ashar",
+    "room": "ANXCN 014",
+    "start": "12:30",
+    "end": "13:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3575-1",
+    "day": "W",
+    "course": "COMP3575",
+    "prof": "Ashar",
+    "room": "ANXCN 014",
+    "start": "12:30",
+    "end": "13:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3575-1-LAB",
+    "day": "F",
+    "course": "COMP3575",
+    "prof": "Ashar",
+    "room": "WILLS 204",
+    "start": "13:00",
+    "end": "14:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3590-1",
+    "day": "T",
+    "course": "COMP3590-1",
+    "prof": "Bingyu",
+    "room": "WATSN 004",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3590-1",
+    "day": "Th",
+    "course": "COMP3590-1",
+    "prof": "Bingyu",
+    "room": "WATSN 004",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3590-1-LAB",
+    "day": "F",
+    "course": "COMP3590-1",
+    "prof": "Bingyu",
+    "room": "ANXCN 306",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3590-2",
+    "day": "W",
+    "course": "COMP3590-2",
+    "prof": "Leon",
+    "room": "BEATT 403",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3590-2",
+    "day": "F",
+    "course": "COMP3590-2",
+    "prof": "Leon",
+    "room": "BEATT 403",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3590-2-LAB",
+    "day": "M",
+    "course": "COMP3590-2",
+    "prof": "Leon",
+    "room": "WENTW 010",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3650-1",
+    "day": "M",
+    "course": "COMP3650",
+    "prof": "Irfan",
+    "room": "DOBBS 302",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3650-1",
+    "day": "W",
+    "course": "COMP3650",
+    "prof": "Irfan",
+    "room": "DOBBS 302",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP3650-1-LAB",
+    "day": "F",
+    "course": "COMP3650",
+    "prof": "Irfan",
+    "room": "WILLS 204",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP3725-1",
+    "day": "T",
+    "course": "COMP3725",
+    "prof": "Fariba",
+    "room": "ANXCN 014",
+    "start": "15:00",
+    "end": "17:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3725-1",
+    "day": "Th",
+    "course": "COMP3725",
+    "prof": "Fariba",
+    "room": "ANXCN 014",
+    "start": "15:00",
+    "end": "17:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3800-1",
+    "day": "W",
+    "course": "COMP3800",
+    "prof": "Steve",
+    "room": "ONLINE",
+    "start": "15:00",
+    "end": "17:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP3800-1",
+    "day": "F",
+    "course": "COMP3800",
+    "prof": "Steve",
+    "room": "ONLINE",
+    "start": "15:00",
+    "end": "17:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP4450-1",
+    "day": "M",
+    "course": "COMP4450",
+    "prof": "Sunjae",
+    "room": "BEATT 419",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4450-1",
+    "day": "W",
+    "course": "COMP4450",
+    "prof": "Sunjae",
+    "room": "BEATT 419",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4450-1-LAB",
+    "day": "F",
+    "course": "COMP4450",
+    "prof": "Sunjae",
+    "room": "DOBBS 310",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP4550-1",
+    "day": "T",
+    "course": "COMP4550-1",
+    "prof": "Weijie",
+    "room": "DOBBS 310",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP4550-1",
+    "day": "Th",
+    "course": "COMP4550-1",
+    "prof": "Weijie",
+    "room": "DOBBS 310",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP4550-1-LAB",
+    "day": "F",
+    "course": "COMP4550-1",
+    "prof": "Weijie",
+    "room": "WILLS 105",
+    "start": "08:00",
+    "end": "09:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP4550-2",
+    "day": "W",
+    "course": "COMP4550-2",
+    "prof": "Kene",
+    "room": "WATSN 006",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4550-2",
+    "day": "F",
+    "course": "COMP4550-2",
+    "prof": "Kene",
+    "room": "WATSN 006",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4550-2-LAB",
+    "day": "M",
+    "course": "COMP4550-2",
+    "prof": "Kene",
+    "room": "DOBBS 203",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP4650-1",
+    "day": "M",
+    "course": "COMP4650",
+    "prof": "Aspen",
+    "room": "WATSN 002",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4650-1",
+    "day": "W",
+    "course": "COMP4650",
+    "prof": "Aspen",
+    "room": "WATSN 002",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": false
+  },
+  {
+    "id": "COMP4650-1-LAB",
+    "day": "F",
+    "course": "COMP4650",
+    "prof": "Aspen",
+    "room": "ANXCN 203",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP4700-1",
+    "day": "T",
+    "course": "COMP4700",
+    "prof": "Yetunde",
+    "room": "WATSN 006",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP4700-1",
+    "day": "Th",
+    "course": "COMP4700",
+    "prof": "Yetunde",
+    "room": "WATSN 006",
+    "start": "08:00",
+    "end": "09:15",
+    "isLab": false
+  },
+  {
+    "id": "COMP4700-1-LAB",
+    "day": "F",
+    "course": "COMP4700",
+    "prof": "Yetunde",
+    "room": "WATSN 001",
+    "start": "10:00",
+    "end": "11:45",
+    "isLab": true
+  },
+  {
+    "id": "COMP5500-1",
+    "day": "W",
+    "course": "COMP5500-1",
+    "prof": "Memo",
+    "room": "ANXCN 014",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-1",
+    "day": "F",
+    "course": "COMP5500-1",
+    "prof": "Memo",
+    "room": "ANXCN 014",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-2",
+    "day": "M",
+    "course": "COMP5500-2",
+    "prof": "Yetunde",
+    "room": "KNGMN 201",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-2",
+    "day": "W",
+    "course": "COMP5500-2",
+    "prof": "Yetunde",
+    "room": "KNGMN 201",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-3",
+    "day": "T",
+    "course": "COMP5500-3",
+    "prof": "Salem",
+    "room": "ANXCN 014",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-3",
+    "day": "Th",
+    "course": "COMP5500-3",
+    "prof": "Salem",
+    "room": "ANXCN 014",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-4",
+    "day": "W",
+    "course": "COMP5500-4",
+    "prof": "Bingyu",
+    "room": "DOBBS 302",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5500-4",
+    "day": "F",
+    "course": "COMP5500-4",
+    "prof": "Bingyu",
+    "room": "DOBBS 302",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5555-1",
+    "day": "M",
+    "course": "COMP5555",
+    "prof": "Abdullah",
+    "room": "BEATT 419",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5555-1",
+    "day": "W",
+    "course": "COMP5555",
+    "prof": "Abdullah",
+    "room": "BEATT 419",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP5700-1",
+    "day": "T",
+    "course": "COMP5700",
+    "prof": "Frank",
+    "room": "KNGMN 201",
+    "start": "17:15",
+    "end": "19:50",
+    "isLab": false
+  },
+  {
+    "id": "COMP5700-1",
+    "day": "Th",
+    "course": "COMP5700",
+    "prof": "Frank",
+    "room": "KNGMN 201",
+    "start": "17:15",
+    "end": "19:50",
+    "isLab": false
+  },
+  {
+    "id": "COMP6420-1",
+    "day": "W",
+    "course": "COMP6420",
+    "prof": "Leon",
+    "room": "DOBBS 310",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP6420-1",
+    "day": "F",
+    "course": "COMP6420",
+    "prof": "Leon",
+    "room": "DOBBS 310",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP7100-1",
+    "day": "M",
+    "course": "COMP7100",
+    "prof": "Salem",
+    "room": "WATSN 006",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "COMP7100-1",
+    "day": "W",
+    "course": "COMP7100",
+    "prof": "Salem",
+    "room": "WATSN 006",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "DATA6100-1",
+    "day": "T",
+    "course": "DATA6100",
+    "prof": "Sunjae",
+    "room": "DOBBS 302",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  },
+  {
+    "id": "DATA6100-1",
+    "day": "Th",
+    "course": "DATA6100",
+    "prof": "Sunjae",
+    "room": "DOBBS 302",
+    "start": "17:15",
+    "end": "18:30",
+    "isLab": false
+  }
+]
