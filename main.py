@@ -4,6 +4,7 @@ from typing import List, Optional, Dict
 from datetime import time
 import re
 import json
+import math
 
 
 # ---------- tiny helpers ----------
@@ -85,11 +86,11 @@ class PreferenceRow:
     course_name: str
     faculty_ranked: List[str]  # ranked by preference order
 
-# @dataclass
-# class RoomRow:
-#     room: str
-#     type: str         # e.g., Lecture, Lab
-#     capacity: int
+@dataclass
+class RoomRow:
+    room: str
+    type: str         # e.g., Lecture, Lab
+    capacity: int
 
 @dataclass
 class TimeSlotRow:
@@ -136,53 +137,42 @@ class RoomSchedule:
 
 @dataclass
 class RoomPreference:
-    course_number: str   # normalized, e.g. "COMP1000"
-    type: str            # "Lab" or "Lecture"
-    rank: int
-    location: str
-    max_cap: int
+    course: str         # normalized course key, e.g. "COMP1000"
+    type: str           # "Lab" / "Lecture"
+    rank: int           # PreferenceRank
+    location: str       # room name, e.g. "DOBBS 203"
+    max_cap: int        # preferred capacity cap (from max_cap column)
+
 
 
 def normalize_course_number(s: str) -> str:
     return (s or "").replace(" ", "").strip()
 
-
-def load_room_preferences(path: str) -> Dict[tuple[str, str], List[RoomPreference]]:
+def load_room_preferences(path: str) -> dict[tuple[str, str], List[RoomPreference]]:
     """
-    Returns:
-      {
-        ("COMP1000", "Lab"): [RoomPreference(...rank 1), rank 2, ...],
-        ("COMP1000", "Lecture"): [...],
-        ...
-      }
+    Returns a dict keyed by (course_key, type_lower) -> [RoomPreference, ...]
+    where course_key is normalized like "COMP1000".
     """
-    prefs: Dict[tuple[str, str], List[RoomPreference]] = {}
+    prefs: dict[tuple[str, str], List[RoomPreference]] = {}
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for r in reader:
-            course_raw = (r.get("Course") or "").strip()
-            course = normalize_course_number(course_raw)
-            rtype = (r.get("Type") or "").strip()
-            rank = to_int(r.get("PreferenceRank", "99"), 99)
-            location = (r.get("Location") or "").strip()
-            max_cap = to_int(r.get("max_cap", "0"), 0)
+            course_raw = (r["Course"] or "").strip()
+            type_raw = (r["Type"] or "").strip()
+            key = (normalize_course_number(course_raw), type_raw.lower())
 
-            if not course or not rtype or not location:
-                continue
-
-            rp = RoomPreference(
-                course_number=course,
-                type=rtype,
-                rank=rank,
-                location=location,
-                max_cap=max_cap,
+            pref = RoomPreference(
+                course=normalize_course_number(course_raw),
+                type=type_raw,
+                rank=to_int(r["PreferenceRank"], 0),
+                location=(r["Location"] or "").strip(),
+                max_cap=to_int(r.get("max_cap", "0")),
             )
-            key = (course, rtype)
-            prefs.setdefault(key, []).append(rp)
+            prefs.setdefault(key, []).append(pref)
 
-    # sort by preference rank
+    # sort each list by rank so we can just iterate in preference order
     for key in prefs:
-        prefs[key].sort(key=lambda rp: rp.rank)
+        prefs[key].sort(key=lambda p: p.rank)
     return prefs
 
 
@@ -221,19 +211,19 @@ def load_preferences(path: str) -> Dict[str, PreferenceRow]:
             out[row.course_number] = row
     return out
 
-# def load_rooms(path: str) -> List[RoomRow]:
-#     out = []
-#     with open(path, newline="", encoding="utf-8-sig") as f:
-#         reader = csv.DictReader(f)
-#         for r in reader:
-#             out.append(
-#                 RoomRow(
-#                     room=r["Room"].strip(),
-#                     type=r["Type"].strip(),
-#                     capacity=to_int(r["Capacity"]),
-#                 )
-#             )
-#     return out
+def load_rooms(path: str) -> List[RoomRow]:
+    out = []
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            out.append(
+                RoomRow(
+                    room=r["Room"].strip(),
+                    type=r["Type"].strip(),
+                    capacity=to_int(r["Capacity"]),
+                )
+            )
+    return out
 
 def load_times(path: str) -> List[TimeSlotRow]:
     out = []
@@ -394,12 +384,12 @@ def update_schedule_with_faculty(schedule: dict, assignment: Dict[str, str]) -> 
             schedule["sections"][sid].faculty = faculty
 
 
-def assign_times_and_labs(
-    schedule: dict,
-    sections: list[Section],
-    times: list[TimeSlotRow],
-    room_prefs: Dict[tuple[str, str], List[RoomPreference]],
-) -> None:
+def assign_times_and_labs(schedule: dict,
+                          sections: list[Section],
+                          times: list[TimeSlotRow],
+                          rooms: list[RoomRow],
+                          room_prefs: dict[tuple[str, str], List[RoomPreference]]) -> None:
+
 
     """
     Sequential scheduler:
@@ -422,6 +412,17 @@ def assign_times_and_labs(
 
     # Sort time slots by actual start time
     times_sorted = sorted(times, key=lambda t: (t.start.hour, t.start.minute))
+
+    # ---------- AM/PM BALANCING FOR UNDERGRAD CLASSES (LEC + LAB) ----------
+    # Each undergrad section with a lab counts as *two* meetings (lec + lab)
+    total_ug_classes = sum(
+        (1 + (1 if sec.lab_hours > 0 else 0))
+        for sec in sections
+        if not is_grad_course(sec.course_number)
+    )
+    max_am_ug_classes = math.ceil(0.6 * total_ug_classes)
+    am_ug_classes_used = 0
+    pm_ug_classes_used = 0
 
     # Track global concurrency (for constraint c11, not implemented here)
     global_concurrency = {d: [] for d in all_days}
@@ -451,9 +452,16 @@ def assign_times_and_labs(
     def t2m(t: time) -> int:
         return t.hour * 60 + t.minute
     
-    def ranges_overlap(s1: int, e1: int, s2: int, e2: int) -> bool:
-        # True if intervals intersect with positive length (touching at a point is OK)
-        return not (e1 <= s2 or e2 <= s1)
+    def ranges_overlap(s1: int, e1: int, s2: int, e2: int, *, gap_min: int = 15) -> bool:
+        """
+        True if intervals are closer than `gap_min` minutes.
+        That is, we consider it a conflict unless there is at least `gap_min`
+        minutes of free time between them.
+        """
+        # Require: e1 + gap <= s2  OR  e2 + gap <= s1 to be "safe"
+        # So conflict = NOT safe.
+        return not (e1 + gap_min <= s2 or e2 + gap_min <= s1)
+
     
     def per_meeting_minutes(total_minutes: int, num_meetings: int) -> int:
         # Split total weekly minutes across the number of meetings (ceil to be safe).
@@ -543,51 +551,80 @@ def assign_times_and_labs(
 
     def find_available_room(
         sec: Section,
-        room_prefs: Dict[tuple[str, str], List[RoomPreference]],
+        rooms: list[RoomRow],
         days: list[str],
         start_t: time,
         end_t: time,
         *,
         is_lab: bool,
-        needed_capacity: int,
+        needed_capacity: int = 25,
     ) -> Optional[str]:
         """
-        Assign a room for a section:
-          - Use room_preferences.csv (course + Type + rank)
-          - First: course-specific preferences
-          - Fallback: any room of same Type from preferences across courses
+        Room selection strategy:
+
+        1) Use room_preferences.csv if entries exist for (course, type),
+           in PreferenceRank order.
+        2) If none of those are free, fall back to ANY free room
+           that meets capacity (ignore type).
+        3) If still nothing, as a last resort pick ANY room
+           (may overbook) but never return None so scheduling
+           can always proceed.
         """
-        base_course = normalize_course_number(sec.course_number)
+
         needed_type = "Lab" if is_lab else "Lecture"
+        course_key = normalize_course_number(sec.course_number)
 
-        # 1️⃣ Course-specific preferences
-        key = (base_course, needed_type)
-        pref_list = room_prefs.get(key, [])
+        prefs_key = (course_key, needed_type.lower())
+        prefs_for_course = room_prefs.get(prefs_key, [])
 
-        for rp in pref_list:
-            if rp.max_cap >= needed_capacity and room_is_free(rp.location, days, start_t, end_t):
-                block_room(rp.location, days, start_t, end_t)
-                return rp.location
+        # effective capacity requirement
+        eff_needed_capacity = max(
+            needed_capacity,
+            getattr(sec, "expected_capacity", 0) or 0,
+        )
 
-        # 2️⃣ Fallback: any room of this type across all courses (smallest capacity first)
-        candidate_rooms: dict[str, int] = {}
-        for (course, rtype), rps in room_prefs.items():
-            if rtype != needed_type:
-                continue
-            for rp in rps:
-                # keep smallest max_cap we’ve seen for a given room
-                if rp.location not in candidate_rooms or rp.max_cap < candidate_rooms[rp.location]:
-                    candidate_rooms[rp.location] = rp.max_cap
+        # 1️⃣ Try preferred rooms for this course+type
+        for pref in prefs_for_course:
+            room_name = pref.location
+            pref_cap = pref.max_cap or eff_needed_capacity
+            for r in rooms:
+                if (
+                    r.room == room_name
+                    and r.capacity >= pref_cap
+                    and room_is_free(r.room, days, start_t, end_t)
+                ):
+                    block_room(r.room, days, start_t, end_t)
+                    return r.room
 
-        for location, cap in sorted(candidate_rooms.items(), key=lambda kv: kv[1]):
-            if cap >= needed_capacity and room_is_free(location, days, start_t, end_t):
-                block_room(location, days, start_t, end_t)
-                return location
+        # 2️⃣ No preferred room free: pick ANY free room that meets capacity
+        #     (ignore type completely so we don't get stuck)
+        capacity_candidates = [
+            r for r in rooms
+            if r.capacity >= eff_needed_capacity
+            and room_is_free(r.room, days, start_t, end_t)
+        ]
 
-        # 3️⃣ Nothing free — mark TBD
-        return "TBD"
+        if capacity_candidates:
+            # pick the smallest-capacity suitable room
+            best_room = min(capacity_candidates, key=lambda r: r.capacity)
+            block_room(best_room.room, days, start_t, end_t)
+            return best_room.room
 
+        # 3️⃣ Last resort: overbook some room instead of failing completely.
+        #    This is exactly "if prefs aren't available, pick any room".
+        if rooms:
+            best_room = min(rooms, key=lambda r: r.capacity)
+            print(
+                f"[ROOM-OVERBOOK] No truly free room for {sec.id} on {days} "
+                f"{start_t.strftime('%H:%M')}-{end_t.strftime('%H:%M')}; "
+                f"using {best_room.room} anyway."
+            )
+            # we still block it so later logic sees it as taken
+            block_room(best_room.room, days, start_t, end_t)
+            return best_room.room
 
+        # no rooms at all in the data
+        return None
 
 
     def preferred_lab_day(lecture_days: list[str]) -> str:
@@ -619,35 +656,61 @@ def assign_times_and_labs(
         # total minutes from your course_durations()
         lecture_min, lab_min = course_durations(sec.lecture_hours, sec.lab_hours)
         
-        # per-meeting (e.g., MW => 2 meetings; TTh => 2; WF => 2)
+                # per-meeting (e.g., MW => 2 meetings; TTh => 2; WF => 2)
         meet_min = per_meeting_minutes(lecture_min, len(pattern_days))
-        
-        # filter evening / regular slots using per-meeting minutes
+
+        # ---------- BASE SLOTS: grad vs undergrad ----------
         if is_grad_course(sec.course_number):
-            # Graduate courses: only between 5–8 PM (17:00–20:00 window)
-            usable_times = [
+            # Grad: only 5–8 PM
+            base_slots = [
                 t for t in times_sorted
                 if 17 <= t.start.hour < 20 and t.duration_min >= meet_min
             ]
         else:
-            # Undergrad courses: anything before 5 PM
-            usable_times = [
+            # Undergrad: anything before 5 PM
+            base_slots = [
                 t for t in times_sorted
                 if t.start.hour < 17 and t.duration_min >= meet_min
             ]
+
+        # ---------- AM/PM balancing for UNDERGRAD LECTURES ----------
+        if not is_grad_course(sec.course_number):
+            am_slots = [t for t in base_slots if t.start.hour < 12]
+            pm_slots = [t for t in base_slots if t.start.hour >= 12]
+
+            # If we've already hit the AM cap, and we have PM options,
+            # force this course to pick from PM slots.
+            if am_ug_classes_used >= max_am_ug_classes and pm_slots:
+                usable_times = pm_slots
+            else:
+                usable_times = base_slots
+        else:
+            # Grad: no AM/PM balancing, already forced to 5–8 PM
+            usable_times = base_slots
+
 
 
         # ---- LECTURE SCHEDULING ----
         chosen_slot = None
         chosen_room = None
 
-        for slot in usable_times:
+        # Prefer slots that are currently less loaded across the pattern days,
+        # then earlier times within those.
+        def slot_busyness(slot: TimeSlotRow) -> int:
+            key = slot_key(slot)
+            return max(slot_load[d].get(key, 0) for d in pattern_days)
+
+        usable_times_sorted = sorted(
+            usable_times,
+            key=lambda t: (slot_busyness(t), t.start.hour, t.start.minute)
+        )
+
+        for slot in usable_times_sorted:
 
             # Skip reserved Tue/Thu 12–1:30
             if overlaps_reserved(pattern_days, slot.start, slot.stop):
                 continue
 
-            # 1️⃣ Check slot concurrency and faculty availability
             if not slot_is_available(pattern_days, slot):
                 continue
             if not is_free(faculty, pattern_days, slot.start, slot.stop):
@@ -655,12 +718,12 @@ def assign_times_and_labs(
             
             # 2️⃣ Try to find a room for this slot
             candidate_room = find_available_room(
-                sec, room_prefs, pattern_days, slot.start, slot.stop,
+                sec, rooms, pattern_days, slot.start, slot.stop,
                 is_lab=False, needed_capacity=25
             )
 
             # If a valid room is found, assign it and break
-            if candidate_room and candidate_room != "TBD":
+            if candidate_room:
                 chosen_slot = slot
                 chosen_room = candidate_room
                 increment_slot_load(pattern_days, chosen_slot)
@@ -671,20 +734,32 @@ def assign_times_and_labs(
         # 3️⃣ Fallback handling (none of the usable_times worked)
         if not chosen_slot:
             print(f"[WARN] Could not find valid room/time for {sec.id} with faculty {faculty}; searching fallback.")
-            for slot in times_sorted:
-                if overlaps_reserved(pattern_days, slot.start, slot.stop):
+
+            if is_grad_course(sec.course_number):
+                # Grad fallback: still only 5–8 PM
+                fallback_slots = [
+                    t for t in times_sorted
+                    if 17 <= t.start.hour < 20 and t.duration_min >= meet_min
+                ]
+            else:
+                # Undergrad fallback: still strictly before 5 PM
+                fallback_slots = [
+                    t for t in times_sorted
+                    if t.start.hour < 17 and t.duration_min >= meet_min
+                ]
+
+            for slot in fallback_slots:
+                if not is_free(faculty, pattern_days, slot.start, slot.stop):
                     continue
+                candidate_room = find_available_room(
+                    sec, rooms, pattern_days, slot.start, slot.stop,
+                    is_lab=False, needed_capacity=25
+                )
+                if candidate_room :
+                    chosen_slot = slot
+                    chosen_room = candidate_room
+                    break
 
-                if is_free(faculty, pattern_days, slot.start, slot.stop):
-                    candidate_room = find_available_room(
-                        sec, room_prefs, pattern_days, slot.start, slot.stop,
-                        is_lab=False, needed_capacity=25
-                    )
-
-                    if candidate_room and candidate_room != "TBD":
-                        chosen_slot = slot
-                        chosen_room = candidate_room
-                        break
                     
         # 4️⃣ Assign final lecture details
         if not chosen_slot or not chosen_room:
@@ -702,6 +777,14 @@ def assign_times_and_labs(
         block_time(faculty, pattern_days, chosen_slot.start, chosen_slot.stop)
         block_concurrency(pattern_days, chosen_slot.start, chosen_slot.stop)
 
+        # Update AM/PM counts for UNDERGRAD lectures only
+        if not is_grad_course(sec.course_number):
+            if chosen_slot.start.hour < 12:
+                am_ug_classes_used += 1
+            else:
+                pm_ug_classes_used += 1
+
+
 
 
         # ---- LAB SCHEDULING ----
@@ -709,10 +792,39 @@ def assign_times_and_labs(
             lab_day = preferred_lab_day(pattern_days)
             lab_slot = None
             lab_room = None
-            lab_times = [t for t in times_sorted if t.duration_min >= lab_min]
+
+            if is_grad_course(sec.course_number):
+                # Grad labs (if any): 5–8 PM
+                lab_times = [
+                    t for t in times_sorted
+                    if 17 <= t.start.hour < 20 and t.duration_min >= lab_min
+                ]
+            else:
+                # Undergrad labs: strictly before 5 PM
+                lab_times = [
+                    t for t in times_sorted
+                    if t.start.hour < 17 and t.duration_min >= lab_min
+                ]
+
+            # Prefer lab slots that are less loaded on that lab_day,
+            # then earlier times within those.
+            def lab_slot_busyness(slot: TimeSlotRow) -> int:
+                key = slot_key(slot)
+                return slot_load[lab_day].get(key, 0)
+
+            lab_times_sorted = sorted(
+                lab_times,
+                key=lambda t: (lab_slot_busyness(t), t.start.hour, t.start.minute)
+            )
         
             # Try to find a lab slot where both faculty and room are available
-            for slot in lab_times:
+            for slot in lab_times_sorted:
+                # Apply AM/PM balance to UNDERGRAD labs as well
+                if not is_grad_course(sec.course_number):
+                    # This lab belongs to an undergrad course
+                    if am_ug_classes_used >= max_am_ug_classes and slot.start.hour < 12:
+                        # We’ve already hit our AM quota → skip extra AM labs if possible
+                        continue
                 if overlaps_reserved([lab_day], slot.start, slot.stop):
                     continue
                 if not slot_is_available([lab_day], slot):
@@ -722,34 +834,46 @@ def assign_times_and_labs(
                 
                 # Try to find a valid room
                 candidate_room = find_available_room(
-                    sec, room_prefs, [lab_day], slot.start, slot.stop,
+                    sec, rooms, [lab_day], slot.start, slot.stop,
                     is_lab=True, needed_capacity=25
                 )
 
         
-                if candidate_room and candidate_room != "TBD":
+                if candidate_room :
                     lab_slot = slot
                     lab_room = candidate_room
                     increment_slot_load([lab_day], lab_slot)
                     block_concurrency([lab_day], slot.start, slot.stop)
                     break
                 
-            # Fallback: try any slot that works with a room
+            # Fallback: try any slot that works with a room, but still obey UG/Grad windows
             if not lab_slot:
                 print(f"[WARN] Could not find valid room/time for LAB {sec.id}, searching fallback.")
-                for slot in times_sorted:
-                    if overlaps_reserved([lab_day], slot.start, slot.stop):
+
+                if is_grad_course(sec.course_number):
+                    fallback_lab_times = [
+                        t for t in times_sorted
+                        if 17 <= t.start.hour < 20 and t.duration_min >= lab_min
+                    ]
+                else:
+                    fallback_lab_times = [
+                        t for t in times_sorted
+                        if t.start.hour < 17 and t.duration_min >= lab_min
+                    ]
+
+                for slot in fallback_lab_times:
+                    if not is_free(faculty, [lab_day], slot.start, slot.stop):
                         continue
-                    if is_free(faculty, [lab_day], slot.start, slot.stop):
-                        candidate_room = find_available_room(
-                            sec, room_prefs, [lab_day], slot.start, slot.stop,
-                            is_lab=True, needed_capacity=25
-                        )
-                        if candidate_room and candidate_room != "TBD":
-                            lab_slot = slot
-                            lab_room = candidate_room
-                            break
-                        
+                    candidate_room = find_available_room(
+                        sec, rooms, [lab_day], slot.start, slot.stop,
+                        is_lab=True, needed_capacity=25
+                    )
+                    if candidate_room :
+                        lab_slot = slot
+                        lab_room = candidate_room
+                        break
+
+
             # Critical fallback: no slot or room found at all
             if not lab_slot or not lab_room:
                 print(f"[CRITICAL] LAB {sec.id}: No available time+room combination found.")
@@ -773,6 +897,12 @@ def assign_times_and_labs(
             # Block faculty and record
             block_time(faculty, [lab_day], lab_slot.start, lab_slot.stop)
             new_entries.append((sec.id, lab_assignment))
+            # Count this lab toward AM/PM balance for undergrad
+            if not is_grad_course(sec.course_number):
+                if lab_slot.start.hour < 12:
+                    am_ug_classes_used += 1
+                else:
+                    pm_ug_classes_used += 1
         
 
     # insert labs right after lectures
@@ -786,6 +916,12 @@ def assign_times_and_labs(
     # expose concurrency info to callers
     schedule["global_concurrency"] = global_concurrency
     schedule["slot_load"] = slot_load
+    schedule["am_pm_counts"] = {
+        "AM": am_ug_classes_used,
+        "PM": pm_ug_classes_used,
+    }
+
+
 
 def export_schedule_to_json(schedule, courses, filename="schedule.json"):
     """
@@ -1509,7 +1645,7 @@ if __name__ == "__main__":
     class Tee(io.TextIOBase):
         def __init__(self, *streams):
             self.streams = streams
-    
+
         def write(self, s):
             for st in self.streams:
                 try:
@@ -1520,7 +1656,7 @@ if __name__ == "__main__":
                     # Stream may already be closed
                     pass
             return len(s)
-    
+
         def flush(self):
             for st in self.streams:
                 try:
@@ -1539,6 +1675,7 @@ if __name__ == "__main__":
             prefs = load_preferences("data/prof_preferences.csv")
             times = load_times("data/timings.csv")
             faculty_limits = load_faculty_load("data/faculty_load.csv")
+            rooms = load_rooms("data/rooms.csv")
             room_prefs = load_room_preferences("data/room_preferences.csv")
 
             # Build a map course_number -> title for Excel export
@@ -1559,7 +1696,7 @@ if __name__ == "__main__":
             schedule["course_titles"] = course_titles         # for Excel export
 
             # Time and lab assignment
-            assign_times_and_labs(schedule, sections, times, room_prefs)
+            assign_times_and_labs(schedule, sections, times, rooms, room_prefs)
 
             sections_map = schedule.get("sections", {})
 
@@ -1568,12 +1705,16 @@ if __name__ == "__main__":
             total_sections = sum(1 for s in sections_map.values() if not getattr(s, "islab", False))
             total_labs = sum(1 for s in sections_map.values() if getattr(s, "islab", False))
             total_faculty = len({s.faculty for s in sections_map.values() if s.faculty and s.faculty != "TBA"})
+            am_pm = schedule.get("am_pm_counts", {})
+            
+
 
             print("\n====================== GLOBAL SUMMARY ======================")
             print(f"Courses in course_list.csv      : {total_courses}")
             print(f"Lecture sections (no labs)      : {total_sections}")
             print(f"Lab sections                    : {total_labs}")
             print(f"Unique assigned faculty (≠ TBA) : {total_faculty}")
+            print(f"AM/PM balance                   : {am_pm}")
             print("============================================================\n")
 
             # ================== 2️⃣ COURSE SECTION COUNTS ==================

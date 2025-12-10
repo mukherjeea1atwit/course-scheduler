@@ -5,8 +5,8 @@
     "course": "COMP1000",
     "prof": "Weijie",
     "room": "BEATT 402",
-    "start": "10:00",
-    "end": "11:45",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -15,8 +15,8 @@
     "course": "COMP1000",
     "prof": "Weijie",
     "room": "BEATT 402",
-    "start": "10:00",
-    "end": "11:45",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -24,7 +24,7 @@
     "day": "M",
     "course": "COMP1000",
     "prof": "Weijie",
-    "room": "RBSTN 103",
+    "room": "DOBBS 203",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -34,9 +34,9 @@
     "day": "M",
     "course": "COMP1050",
     "prof": "Dave",
-    "room": "WATSN 002",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "DOBBS 302",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -44,9 +44,9 @@
     "day": "W",
     "course": "COMP1050",
     "prof": "Dave",
-    "room": "WATSN 002",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "DOBBS 302",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -54,9 +54,9 @@
     "day": "F",
     "course": "COMP1050",
     "prof": "Dave",
-    "room": "DOBBS 302",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "DOBBS 310",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -66,7 +66,7 @@
     "prof": "Dave",
     "room": "WENTW 010",
     "start": "08:00",
-    "end": "09:15",
+    "end": "09:45",
     "isLab": false
   },
   {
@@ -76,7 +76,7 @@
     "prof": "Dave",
     "room": "WENTW 010",
     "start": "08:00",
-    "end": "09:15",
+    "end": "09:45",
     "isLab": false
   },
   {
@@ -85,8 +85,8 @@
     "course": "COMP2000",
     "prof": "Dave",
     "room": "BEATT 420",
-    "start": "13:00",
-    "end": "14:45",
+    "start": "08:00",
+    "end": "09:45",
     "isLab": true
   },
   {
@@ -94,9 +94,9 @@
     "day": "W",
     "course": "COMP2350",
     "prof": "Memo",
-    "room": "ANXCN 103",
-    "start": "09:30",
-    "end": "10:45",
+    "room": "WILLS 204",
+    "start": "12:30",
+    "end": "13:45",
     "isLab": false
   },
   {
@@ -104,9 +104,9 @@
     "day": "F",
     "course": "COMP2350",
     "prof": "Memo",
-    "room": "ANXCN 103",
-    "start": "09:30",
-    "end": "10:45",
+    "room": "WILLS 204",
+    "start": "12:30",
+    "end": "13:45",
     "isLab": false
   },
   {
@@ -114,9 +114,9 @@
     "day": "M",
     "course": "COMP2350",
     "prof": "Memo",
-    "room": "ANXCN 101",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "WATSN 002",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": true
   },
   {
@@ -125,8 +125,8 @@
     "course": "COMP2500",
     "prof": "Cliff",
     "room": "ANXCN 203",
-    "start": "09:30",
-    "end": "10:45",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": false
   },
   {
@@ -135,8 +135,8 @@
     "course": "COMP2500",
     "prof": "Cliff",
     "room": "ANXCN 203",
-    "start": "09:30",
-    "end": "10:45",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": false
   },
   {
@@ -144,9 +144,9 @@
     "day": "F",
     "course": "COMP2500",
     "prof": "Cliff",
-    "room": "DOBBS 308",
-    "start": "13:00",
-    "end": "14:45",
+    "room": "DOBBS 203",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": true
   },
   {
@@ -154,7 +154,7 @@
     "day": "M",
     "course": "COMP3220",
     "prof": "Salem",
-    "room": "ANXCN 014",
+    "room": "ANXCN 005",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -164,7 +164,7 @@
     "day": "W",
     "course": "COMP3220",
     "prof": "Salem",
-    "room": "ANXCN 014",
+    "room": "ANXCN 005",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -174,7 +174,7 @@
     "day": "F",
     "course": "COMP3220",
     "prof": "Salem",
-    "room": "DOBBS 203",
+    "room": "ANXCN 005",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -184,7 +184,7 @@
     "day": "T",
     "course": "COMP3230",
     "prof": "Micah",
-    "room": "ANXCN 014",
+    "room": "ANXCN 005",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -194,7 +194,7 @@
     "day": "Th",
     "course": "COMP3230",
     "prof": "Micah",
-    "room": "ANXCN 014",
+    "room": "ANXCN 005",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -204,9 +204,9 @@
     "day": "F",
     "course": "COMP3230",
     "prof": "Micah",
-    "room": "WILLS 204",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 005",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": true
   },
   {
@@ -214,9 +214,9 @@
     "day": "W",
     "course": "COMP3350-1",
     "prof": "Aspen",
-    "room": "KNGMN 201",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -224,9 +224,9 @@
     "day": "F",
     "course": "COMP3350-1",
     "prof": "Aspen",
-    "room": "KNGMN 201",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -234,7 +234,7 @@
     "day": "M",
     "course": "COMP3350-1",
     "prof": "Aspen",
-    "room": "DOBBS 203",
+    "room": "ANXCN 014",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -244,9 +244,9 @@
     "day": "M",
     "course": "COMP3350-2",
     "prof": "Frank",
-    "room": "DOBBS 302",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": false
   },
   {
@@ -254,9 +254,9 @@
     "day": "W",
     "course": "COMP3350-2",
     "prof": "Frank",
-    "room": "DOBBS 302",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": false
   },
   {
@@ -264,9 +264,9 @@
     "day": "F",
     "course": "COMP3350-2",
     "prof": "Frank",
-    "room": "DOBBS 310",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 005",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
@@ -274,9 +274,9 @@
     "day": "T",
     "course": "COMP3350-3",
     "prof": "Abdullah",
-    "room": "KNGMN 201",
+    "room": "ANXCN 014",
     "start": "08:00",
-    "end": "09:15",
+    "end": "09:45",
     "isLab": false
   },
   {
@@ -284,9 +284,9 @@
     "day": "Th",
     "course": "COMP3350-3",
     "prof": "Abdullah",
-    "room": "KNGMN 201",
+    "room": "ANXCN 014",
     "start": "08:00",
-    "end": "09:15",
+    "end": "09:45",
     "isLab": false
   },
   {
@@ -294,9 +294,9 @@
     "day": "F",
     "course": "COMP3350-3",
     "prof": "Abdullah",
-    "room": "WATSN 001",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 005",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -304,9 +304,9 @@
     "day": "W",
     "course": "COMP3350-4",
     "prof": "Sunjae",
-    "room": "BEATT 419",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -314,9 +314,9 @@
     "day": "F",
     "course": "COMP3350-4",
     "prof": "Sunjae",
-    "room": "BEATT 419",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -324,9 +324,9 @@
     "day": "M",
     "course": "COMP3350-4",
     "prof": "Sunjae",
-    "room": "WILLS 204",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 005",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
@@ -334,9 +334,9 @@
     "day": "M",
     "course": "COMP3400",
     "prof": "Kene",
-    "room": "DOBBS 310",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "12:30",
+    "end": "13:45",
     "isLab": false
   },
   {
@@ -344,9 +344,9 @@
     "day": "W",
     "course": "COMP3400",
     "prof": "Kene",
-    "room": "DOBBS 310",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "12:30",
+    "end": "13:45",
     "isLab": false
   },
   {
@@ -354,9 +354,9 @@
     "day": "F",
     "course": "COMP3400",
     "prof": "Kene",
-    "room": "DOBBS 306",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 014",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": true
   },
   {
@@ -364,9 +364,9 @@
     "day": "T",
     "course": "COMP3450-1",
     "prof": "Barry",
-    "room": "DOBBS 302",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -374,9 +374,9 @@
     "day": "Th",
     "course": "COMP3450-1",
     "prof": "Barry",
-    "room": "DOBBS 302",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -384,7 +384,7 @@
     "day": "F",
     "course": "COMP3450-1",
     "prof": "Barry",
-    "room": "WATSN 006",
+    "room": "ANXCN 103",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -394,9 +394,9 @@
     "day": "W",
     "course": "COMP3450-2",
     "prof": "Micah",
-    "room": "ANXCN 014",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 103",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -404,9 +404,9 @@
     "day": "F",
     "course": "COMP3450-2",
     "prof": "Micah",
-    "room": "ANXCN 014",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 103",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -414,9 +414,9 @@
     "day": "M",
     "course": "COMP3450-2",
     "prof": "Micah",
-    "room": "WATSN 001",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 005",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -424,9 +424,9 @@
     "day": "M",
     "course": "COMP3450-3",
     "prof": "Abdullah",
-    "room": "WATSN 006",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": false
   },
   {
@@ -434,9 +434,9 @@
     "day": "W",
     "course": "COMP3450-3",
     "prof": "Abdullah",
-    "room": "WATSN 006",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 014",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": false
   },
   {
@@ -444,7 +444,7 @@
     "day": "F",
     "course": "COMP3450-3",
     "prof": "Abdullah",
-    "room": "DOBBS 203",
+    "room": "ANXCN 103",
     "start": "10:00",
     "end": "11:45",
     "isLab": true
@@ -455,8 +455,8 @@
     "course": "COMP3450-4",
     "prof": "Micah",
     "room": "ANXCN 014",
-    "start": "09:30",
-    "end": "10:45",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": false
   },
   {
@@ -465,8 +465,8 @@
     "course": "COMP3450-4",
     "prof": "Micah",
     "room": "ANXCN 014",
-    "start": "09:30",
-    "end": "10:45",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": false
   },
   {
@@ -474,9 +474,9 @@
     "day": "F",
     "course": "COMP3450-4",
     "prof": "Micah",
-    "room": "DOBBS 203",
-    "start": "13:00",
-    "end": "14:45",
+    "room": "ANXCN 107",
+    "start": "08:00",
+    "end": "09:45",
     "isLab": true
   },
   {
@@ -484,9 +484,9 @@
     "day": "W",
     "course": "COMP3500",
     "prof": "Irfan",
-    "room": "WENTW 010",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 103",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -494,9 +494,9 @@
     "day": "F",
     "course": "COMP3500",
     "prof": "Irfan",
-    "room": "WENTW 010",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 103",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -504,7 +504,7 @@
     "day": "M",
     "course": "COMP3500",
     "prof": "Irfan",
-    "room": "DOBBS 306",
+    "room": "ANXCN 103",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -534,9 +534,9 @@
     "day": "F",
     "course": "COMP3510",
     "prof": "Cliff",
-    "room": "WATSN 004",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 014",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
@@ -544,9 +544,9 @@
     "day": "T",
     "course": "COMP3550-1",
     "prof": "Ashar",
-    "room": "BEATT 419",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -554,9 +554,9 @@
     "day": "Th",
     "course": "COMP3550-1",
     "prof": "Ashar",
-    "room": "BEATT 419",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -564,9 +564,9 @@
     "day": "F",
     "course": "COMP3550-1",
     "prof": "Ashar",
-    "room": "BEATT 420",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 107",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -574,9 +574,9 @@
     "day": "W",
     "course": "COMP3550-2",
     "prof": "Ashar",
-    "room": "KNGMN 201",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 108",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -584,9 +584,9 @@
     "day": "F",
     "course": "COMP3550-2",
     "prof": "Ashar",
-    "room": "KNGMN 201",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 108",
+    "start": "09:30",
+    "end": "10:45",
     "isLab": false
   },
   {
@@ -594,9 +594,9 @@
     "day": "M",
     "course": "COMP3550-2",
     "prof": "Ashar",
-    "room": "WATSN 004",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 014",
+    "start": "10:00",
+    "end": "11:45",
     "isLab": true
   },
   {
@@ -604,7 +604,7 @@
     "day": "M",
     "course": "COMP3575",
     "prof": "Ashar",
-    "room": "ANXCN 014",
+    "room": "ANXCN 103",
     "start": "12:30",
     "end": "13:45",
     "isLab": false
@@ -614,7 +614,7 @@
     "day": "W",
     "course": "COMP3575",
     "prof": "Ashar",
-    "room": "ANXCN 014",
+    "room": "ANXCN 103",
     "start": "12:30",
     "end": "13:45",
     "isLab": false
@@ -624,7 +624,7 @@
     "day": "F",
     "course": "COMP3575",
     "prof": "Ashar",
-    "room": "WILLS 204",
+    "room": "ANXCN 107",
     "start": "13:00",
     "end": "14:45",
     "isLab": true
@@ -635,8 +635,8 @@
     "course": "COMP3590-1",
     "prof": "Bingyu",
     "room": "WATSN 004",
-    "start": "08:00",
-    "end": "09:15",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -645,8 +645,8 @@
     "course": "COMP3590-1",
     "prof": "Bingyu",
     "room": "WATSN 004",
-    "start": "08:00",
-    "end": "09:15",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -654,9 +654,9 @@
     "day": "F",
     "course": "COMP3590-1",
     "prof": "Bingyu",
-    "room": "ANXCN 306",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 108",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": true
   },
   {
@@ -664,9 +664,9 @@
     "day": "W",
     "course": "COMP3590-2",
     "prof": "Leon",
-    "room": "BEATT 403",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "WATSN 004",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -674,9 +674,9 @@
     "day": "F",
     "course": "COMP3590-2",
     "prof": "Leon",
-    "room": "BEATT 403",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "WATSN 004",
+    "start": "11:00",
+    "end": "12:15",
     "isLab": false
   },
   {
@@ -684,9 +684,9 @@
     "day": "M",
     "course": "COMP3590-2",
     "prof": "Leon",
-    "room": "WENTW 010",
-    "start": "08:00",
-    "end": "09:45",
+    "room": "ANXCN 107",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
@@ -694,9 +694,9 @@
     "day": "M",
     "course": "COMP3650",
     "prof": "Irfan",
-    "room": "DOBBS 302",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 108",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -704,9 +704,9 @@
     "day": "W",
     "course": "COMP3650",
     "prof": "Irfan",
-    "room": "DOBBS 302",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 108",
+    "start": "14:00",
+    "end": "15:15",
     "isLab": false
   },
   {
@@ -714,7 +714,7 @@
     "day": "F",
     "course": "COMP3650",
     "prof": "Irfan",
-    "room": "WILLS 204",
+    "room": "ANXCN 107",
     "start": "10:00",
     "end": "11:45",
     "isLab": true
@@ -744,7 +744,7 @@
     "day": "W",
     "course": "COMP3800",
     "prof": "Steve",
-    "room": "ONLINE",
+    "room": "WENTW 010",
     "start": "15:00",
     "end": "17:15",
     "isLab": false
@@ -754,7 +754,7 @@
     "day": "F",
     "course": "COMP3800",
     "prof": "Steve",
-    "room": "ONLINE",
+    "room": "WENTW 010",
     "start": "15:00",
     "end": "17:15",
     "isLab": false
@@ -764,9 +764,9 @@
     "day": "M",
     "course": "COMP4450",
     "prof": "Sunjae",
-    "room": "BEATT 419",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 107",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -774,9 +774,9 @@
     "day": "W",
     "course": "COMP4450",
     "prof": "Sunjae",
-    "room": "BEATT 419",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 107",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -784,9 +784,9 @@
     "day": "F",
     "course": "COMP4450",
     "prof": "Sunjae",
-    "room": "DOBBS 310",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 201",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -794,9 +794,9 @@
     "day": "T",
     "course": "COMP4550-1",
     "prof": "Weijie",
-    "room": "DOBBS 310",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -804,9 +804,9 @@
     "day": "Th",
     "course": "COMP4550-1",
     "prof": "Weijie",
-    "room": "DOBBS 310",
-    "start": "08:00",
-    "end": "09:15",
+    "room": "ANXCN 005",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -814,7 +814,7 @@
     "day": "F",
     "course": "COMP4550-1",
     "prof": "Weijie",
-    "room": "WILLS 105",
+    "room": "ANXCN 201",
     "start": "08:00",
     "end": "09:45",
     "isLab": true
@@ -824,9 +824,9 @@
     "day": "W",
     "course": "COMP4550-2",
     "prof": "Kene",
-    "room": "WATSN 006",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
     "isLab": false
   },
   {
@@ -834,9 +834,9 @@
     "day": "F",
     "course": "COMP4550-2",
     "prof": "Kene",
-    "room": "WATSN 006",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 014",
+    "start": "08:00",
+    "end": "09:15",
     "isLab": false
   },
   {
@@ -844,9 +844,9 @@
     "day": "M",
     "course": "COMP4550-2",
     "prof": "Kene",
-    "room": "DOBBS 203",
-    "start": "10:00",
-    "end": "11:45",
+    "room": "ANXCN 103",
+    "start": "15:00",
+    "end": "17:15",
     "isLab": true
   },
   {
@@ -855,8 +855,8 @@
     "course": "COMP4650",
     "prof": "Aspen",
     "room": "WATSN 002",
-    "start": "10:00",
-    "end": "11:45",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -865,8 +865,8 @@
     "course": "COMP4650",
     "prof": "Aspen",
     "room": "WATSN 002",
-    "start": "10:00",
-    "end": "11:45",
+    "start": "15:30",
+    "end": "16:45",
     "isLab": false
   },
   {
@@ -875,8 +875,8 @@
     "course": "COMP4650",
     "prof": "Aspen",
     "room": "ANXCN 203",
-    "start": "10:00",
-    "end": "11:45",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
@@ -884,7 +884,7 @@
     "day": "T",
     "course": "COMP4700",
     "prof": "Yetunde",
-    "room": "WATSN 006",
+    "room": "ANXCN 103",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -894,7 +894,7 @@
     "day": "Th",
     "course": "COMP4700",
     "prof": "Yetunde",
-    "room": "WATSN 006",
+    "room": "ANXCN 103",
     "start": "08:00",
     "end": "09:15",
     "isLab": false
@@ -904,7 +904,7 @@
     "day": "F",
     "course": "COMP4700",
     "prof": "Yetunde",
-    "room": "WATSN 001",
+    "room": "ANXCN 201",
     "start": "10:00",
     "end": "11:45",
     "isLab": true
@@ -914,7 +914,7 @@
     "day": "W",
     "course": "COMP5500-1",
     "prof": "Memo",
-    "room": "ANXCN 014",
+    "room": "BEATT 401",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -924,7 +924,7 @@
     "day": "F",
     "course": "COMP5500-1",
     "prof": "Memo",
-    "room": "ANXCN 014",
+    "room": "BEATT 401",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -934,9 +934,9 @@
     "day": "M",
     "course": "COMP5500-2",
     "prof": "Yetunde",
-    "room": "KNGMN 201",
+    "room": "ANXCN 005",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:00",
     "isLab": false
   },
   {
@@ -944,9 +944,9 @@
     "day": "W",
     "course": "COMP5500-2",
     "prof": "Yetunde",
-    "room": "KNGMN 201",
+    "room": "ANXCN 005",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:00",
     "isLab": false
   },
   {
@@ -954,7 +954,7 @@
     "day": "T",
     "course": "COMP5500-3",
     "prof": "Salem",
-    "room": "ANXCN 014",
+    "room": "BEATT 401",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -964,7 +964,7 @@
     "day": "Th",
     "course": "COMP5500-3",
     "prof": "Salem",
-    "room": "ANXCN 014",
+    "room": "BEATT 401",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -974,7 +974,7 @@
     "day": "W",
     "course": "COMP5500-4",
     "prof": "Bingyu",
-    "room": "DOBBS 302",
+    "room": "FORCE_ASSIGN_ROOM",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -984,7 +984,7 @@
     "day": "F",
     "course": "COMP5500-4",
     "prof": "Bingyu",
-    "room": "DOBBS 302",
+    "room": "FORCE_ASSIGN_ROOM",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -994,7 +994,7 @@
     "day": "M",
     "course": "COMP5555",
     "prof": "Abdullah",
-    "room": "BEATT 419",
+    "room": "FORCE_ASSIGN_ROOM",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -1004,7 +1004,7 @@
     "day": "W",
     "course": "COMP5555",
     "prof": "Abdullah",
-    "room": "BEATT 419",
+    "room": "FORCE_ASSIGN_ROOM",
     "start": "17:15",
     "end": "18:30",
     "isLab": false
@@ -1014,7 +1014,7 @@
     "day": "T",
     "course": "COMP5700",
     "prof": "Frank",
-    "room": "KNGMN 201",
+    "room": "ANXCN 005",
     "start": "17:15",
     "end": "19:50",
     "isLab": false
@@ -1024,7 +1024,7 @@
     "day": "Th",
     "course": "COMP5700",
     "prof": "Frank",
-    "room": "KNGMN 201",
+    "room": "ANXCN 005",
     "start": "17:15",
     "end": "19:50",
     "isLab": false
@@ -1034,9 +1034,9 @@
     "day": "W",
     "course": "COMP6420",
     "prof": "Leon",
-    "room": "DOBBS 310",
+    "room": "ANXCN 014",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:50",
     "isLab": false
   },
   {
@@ -1044,9 +1044,9 @@
     "day": "F",
     "course": "COMP6420",
     "prof": "Leon",
-    "room": "DOBBS 310",
+    "room": "ANXCN 014",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:50",
     "isLab": false
   },
   {
@@ -1054,9 +1054,9 @@
     "day": "M",
     "course": "COMP7100",
     "prof": "Salem",
-    "room": "WATSN 006",
+    "room": "ANXCN 103",
     "start": "17:15",
-    "end": "18:30",
+    "end": "20:45",
     "isLab": false
   },
   {
@@ -1064,9 +1064,9 @@
     "day": "W",
     "course": "COMP7100",
     "prof": "Salem",
-    "room": "WATSN 006",
+    "room": "ANXCN 103",
     "start": "17:15",
-    "end": "18:30",
+    "end": "20:45",
     "isLab": false
   },
   {
@@ -1074,9 +1074,9 @@
     "day": "T",
     "course": "DATA6100",
     "prof": "Sunjae",
-    "room": "DOBBS 302",
+    "room": "ANXCN 014",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:00",
     "isLab": false
   },
   {
@@ -1084,9 +1084,9 @@
     "day": "Th",
     "course": "DATA6100",
     "prof": "Sunjae",
-    "room": "DOBBS 302",
+    "room": "ANXCN 014",
     "start": "17:15",
-    "end": "18:30",
+    "end": "19:00",
     "isLab": false
   }
 ]
