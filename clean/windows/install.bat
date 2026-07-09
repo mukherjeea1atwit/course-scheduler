@@ -14,18 +14,55 @@ echo   WIT Class Scheduler - Installer
 echo ============================================
 echo.
 
-:: ── Check for Python ────────────────────────────────────────────────────────
+:: ── Check for Python; auto-install a fresh copy if it's missing ─────────────
+set "PY="
 where python >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] Python was not found on this computer.
-    echo.
-    echo Please install Python 3.10 or newer from https://www.python.org/downloads/
-    echo During setup, check the box "Add python.exe to PATH", then re-run this installer.
-    pause
-    exit /b 1
+if not errorlevel 1 set "PY=python"
+if not defined PY (
+    where py >nul 2>nul
+    if not errorlevel 1 set "PY=py -3"
 )
 
-for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER=%%v
+if not defined PY (
+    echo Python was not found on this computer - installing it automatically...
+    echo.
+
+    where winget >nul 2>nul
+    if not errorlevel 1 (
+        echo Installing Python via winget ^(this may take a few minutes^)...
+        winget install -e --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
+    ) else (
+        echo winget not available - downloading the official Python installer instead...
+        set "PYEXE_TMP=%INSTALL_DIR%\python-installer.exe"
+        if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+        powershell -NoProfile -Command ^
+            "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile '%PYEXE_TMP%'"
+        if errorlevel 1 (
+            echo [ERROR] Could not download the Python installer. Check your internet connection.
+            pause
+            exit /b 1
+        )
+        echo Installing Python silently...
+        "%PYEXE_TMP%" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
+        del "%PYEXE_TMP%"
+    )
+
+    :: The Python installer registers the "py" launcher in C:\Windows, which is
+    :: always on PATH, so it's usable immediately without restarting this shell —
+    :: unlike a plain PATH update, which this already-running cmd.exe won't see.
+    where py >nul 2>nul
+    if not errorlevel 1 (
+        set "PY=py -3"
+    ) else (
+        echo [ERROR] Python installation did not complete successfully.
+        echo Please install Python manually from https://www.python.org/downloads/
+        echo ^(check "Add python.exe to PATH"^), then re-run this installer.
+        pause
+        exit /b 1
+    )
+)
+
+for /f "tokens=2 delims= " %%v in ('%PY% --version 2^>^&1') do set PYVER=%%v
 echo Found Python %PYVER%
 
 :: ── Check for git; fall back to a zip download if missing ──────────────────
@@ -69,7 +106,7 @@ if not exist "%APP_DIR%\server.py" (
 :: ── Create virtual environment ──────────────────────────────────────────────
 echo.
 echo Setting up a private Python environment...
-python -m venv "%APP_DIR%\venv"
+%PY% -m venv "%APP_DIR%\venv"
 if errorlevel 1 (
     echo [ERROR] Failed to create the virtual environment.
     pause
