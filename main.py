@@ -19,9 +19,13 @@ from typing import Dict, List, Optional, Tuple
 # CONSTANTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Grad courses per prof : 2 max
-# Prof preference is a hard constraint
-# underloaded professor recheck logic -> Prog 1 2 or DS if underlaoded
+# Scheduling rules enforced below:
+#  • Faculty preference is a HARD constraint — a section is only assigned to a
+#    prof listed in its preference row; otherwise it goes to TBA. (faculty_candidates)
+#  • ≤ 2 graduate (5000+) sections per professor.                        (can_assign)
+#  • Load balancing: within the preferred pool the most-underloaded prof (relative
+#    to their target load) is tried first, so sections spread toward every prof's
+#    target instead of piling onto whoever is listed first.       (faculty_candidates)
 
 # ── Course-list selector ──────────────────────────────────────────────────────
 # True  → Spring 27 Excel file  ("list of courses and hours COMP - Spring 27.xlsx")
@@ -40,6 +44,11 @@ RESERVED_START  = 12 * 60   # Tue/Thu 12:00 reserved (minutes from midnight)
 RESERVED_END    = 13 * 60   # Tue/Thu 13:00 — ends at 1 PM so 1:00 PM slots are free
 AM_CUTOFF_HR    = 12        # hours before this = AM
 AM_TARGET_RATIO = 0.60      # 60 % of undergrad meetings should be AM
+
+# Foundational courses anyone can teach — used to top up underloaded profs from
+# leftover (TBA) sections (CS1 / CS2 / Data Structures). Intentional, narrow
+# exception to the hard preference rule.
+FOUNDATION_COURSES = {"COMP1000", "COMP1050", "COMP2000"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,6 +116,7 @@ class ScheduledSection:
     end_time: Optional[time]
     has_lab: bool
     is_lab: bool = False
+    topup: bool = False   # assigned via the underload top-up exception (non-preferred prof)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -189,6 +199,14 @@ def overlaps_reserved(days: List[str], start: time, end: time) -> bool:
 def times_conflict(s1: int, e1: int, s2: int, e2: int, gap: int = FACULTY_GAP_MIN) -> bool:
     """True if two time ranges are closer than `gap` minutes."""
     return not (e1 + gap <= s2 or e2 + gap <= s1)
+
+
+def blocks_overlap(days1: List[str], s1: int, e1: int, days2: List[str], s2: int, e2: int) -> bool:
+    """True if two (days, start_min, end_min) blocks share a day and their times
+    actually overlap (no faculty gap applied — this is a student-scheduling check)."""
+    if not (set(days1) & set(days2)):
+        return False
+    return s1 < e2 and s2 < e1
 
 
 
@@ -301,6 +319,29 @@ def load_room_preferences(path: str) -> Dict[Tuple[str, str], List[RoomPreferenc
             out.setdefault(key, []).append(pref)
     for lst in out.values():
         lst.sort(key=lambda p: p.rank)
+    return out
+
+
+def load_non_overlap_groups(path: str) -> Dict[str, List[str]]:
+    """Returns {group_name: [normalized_course_number, ...]}.
+
+    Each group is a set of courses students are expected to take in the same
+    semester per the curriculum (e.g. COMP2000/COMP2100/COMP2650 in Fall
+    Year 2). The scheduler tries to keep at least one non-overlapping section
+    per course within a group; groups/courses can be added by editing this CSV.
+    """
+    out: Dict[str, List[str]] = {}
+    if not os.path.exists(path):
+        return out
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            group = (r.get("group") or "").strip()
+            course = normalize(r.get("course_number") or "")
+            if not group or not course:
+                continue
+            lst = out.setdefault(group, [])
+            if course not in lst:
+                lst.append(course)
     return out
 
 
@@ -426,9 +467,10 @@ class TimeSlotScheduler:
         self.slots = sorted(timeslots, key=lambda t: (t.start.hour, t.start.minute))
         self._faculty_busy: Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
         self._slot_load: Dict[str, Dict[str, int]] = {d: {} for d in ALL_DAYS}
-        # Counts all sections by (day, start_minute) regardless of duration.
-        # Used for C11: prevents > 10 concurrent sections at the same start time.
-        self._start_load: Dict[str, Dict[int, int]] = {d: {} for d in ALL_DAYS}
+        # Every booked (start, end) interval per day. Used for C11 so the guard
+        # counts true time overlaps (e.g. a 17:15-18:45 lecture overlapping an
+        # 18:00 grad session), exactly as the constraint validator does.
+        self._day_intervals: Dict[str, List[Tuple[int, int]]] = {d: [] for d in ALL_DAYS}
 
     # ── public interface ────────────────────────────────────────────
 
@@ -510,17 +552,22 @@ class TimeSlotScheduler:
             entry.setdefault(d, []).append((s, e))
 
     def _slot_capacity_ok(self, days: List[str], slot: TimeSlot) -> bool:
-        # Count ALL sections starting at the same time (any duration) to correctly
-        # enforce the ≤ 10 concurrent limit regardless of slot length variation.
-        start_min = t2m(slot.start)
-        return all(self._start_load[d].get(start_min, 0) < 10 for d in days)
+        # Count sections whose time range actually overlaps this slot (not just
+        # those with the same start minute) so the ≤ 10 concurrent limit (C11)
+        # holds even when blocks of different lengths/start times overlap.
+        s, e = t2m(slot.start), t2m(slot.stop)
+        for d in days:
+            concurrent = sum(1 for (bs, be) in self._day_intervals[d] if not (e <= bs or be <= s))
+            if concurrent >= 10:
+                return False
+        return True
 
     def _increment_load(self, days: List[str], slot: TimeSlot) -> None:
         key = self._slot_key(slot)
-        start_min = t2m(slot.start)
+        s, e = t2m(slot.start), t2m(slot.stop)
         for d in days:
             self._slot_load[d][key] = self._slot_load[d].get(key, 0) + 1
-            self._start_load[d][start_min] = self._start_load[d].get(start_min, 0) + 1
+            self._day_intervals[d].append((s, e))
 
     def _busyness(self, slot: TimeSlot, days: List[str]) -> int:
         key = self._slot_key(slot)
@@ -551,6 +598,7 @@ def build_schedule(
     faculty_limits: Dict[str, int],
     time_sched: TimeSlotScheduler,
     room_assigner: RoomAssigner,
+    non_overlap_groups: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, ScheduledSection]:
     """
     Jointly assigns faculty + day pattern + time slot + room for each section so that
@@ -559,6 +607,45 @@ def build_schedule(
     """
     lectures: Dict[str, ScheduledSection] = {}
     labs: List[ScheduledSection] = []
+
+    # ── non-overlap groups (data/non_overlap_groups.csv) ───────────────────────
+    # course_to_groups: normalized course number → list of group names it belongs to.
+    # group_reps: group → {course → (days_frozenset, start_min, end_min)} — the first
+    # non-overlapping time found for each course in the group; used to bias later
+    # sections of other group courses away from it (best-effort, checked at the end).
+    non_overlap_groups = non_overlap_groups or {}
+    course_to_groups: Dict[str, List[str]] = {}
+    for grp, courses_in_grp in non_overlap_groups.items():
+        for c in courses_in_grp:
+            course_to_groups.setdefault(c, []).append(grp)
+    group_reps: Dict[str, Dict[str, Tuple[frozenset, int, int]]] = {}
+
+    def _group_bias(course_number: str, days: List[str], start_min: int, end_min: int) -> int:
+        """0 if this slot keeps a non-overlapping representative achievable for
+        every group this course belongs to, 1 if it would clash with another
+        course's already-established representative (deprioritized, not banned)."""
+        cn = normalize(course_number)
+        for grp in course_to_groups.get(cn, []):
+            reps = group_reps.get(grp, {})
+            if cn in reps:
+                continue  # this course already has a safe representative
+            for other_cn, (o_days, o_s, o_e) in reps.items():
+                if other_cn != cn and blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e):
+                    return 1
+        return 0
+
+    def _record_group_rep(course_number: str, days: List[str], start_min: int, end_min: int) -> None:
+        cn = normalize(course_number)
+        for grp in course_to_groups.get(cn, []):
+            reps = group_reps.setdefault(grp, {})
+            if cn in reps:
+                continue
+            conflict = any(
+                other_cn != cn and blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e)
+                for other_cn, (o_days, o_s, o_e) in reps.items()
+            )
+            if not conflict:
+                reps[cn] = (frozenset(days), start_min, end_min)
 
     # ── integrated state ───────────────────────────────────────────────────────
     faculty_load: Dict[str, int] = {f: 0 for f in faculty_limits}
@@ -581,7 +668,8 @@ def build_schedule(
         return faculty_limits.get(fac, 3)
 
     def can_assign(fac: str, sec: Section) -> bool:
-        """Faculty has remaining load capacity and hasn't taught 2 sections of this course yet."""
+        """Faculty has remaining load capacity, hasn't taught 2 sections of this
+        course yet, and — for grad courses — hasn't already been given 2 grad sections."""
         faculty_load.setdefault(fac, 0)
         if faculty_load[fac] >= max_load(fac):
             return False
@@ -589,22 +677,37 @@ def build_schedule(
             1 for s in lectures.values()
             if s.faculty == fac and s.course_number == sec.course_number
         )
-        return same < 2
+        if same >= 2:
+            return False
+        # ≤ 2 graduate (5000+) sections per professor, across all grad courses.
+        if is_grad(sec.course_number):
+            grad_count = sum(
+                1 for s in lectures.values()
+                if s.faculty == fac and is_grad(s.course_number)
+            )
+            if grad_count >= 2:
+                return False
+        return True
 
     def faculty_candidates(sec: Section) -> List[str]:
-        """Preferred faculty first (by rank), then all remaining with capacity."""
+        """Preferred faculty only — preference is a HARD constraint, so a section
+        is never offered to a prof outside its preference row (it falls through to
+        the TBA fallback instead). Within the preferred pool the most-underloaded
+        prof (smallest load / target ratio) is tried first so sections spread toward
+        every prof's target; CSV rank order breaks ties (stable sort)."""
         seen: set = set()
-        result: List[str] = []
+        pref: List[str] = []
         for f in fac_prefs.get(sec.course_number, []):
             if f not in seen:
-                result.append(f)
+                pref.append(f)
                 seen.add(f)
                 faculty_load.setdefault(f, 0)
-        for f in faculty_limits:
-            if f not in seen:
-                result.append(f)
-                seen.add(f)
-        return result
+
+        def fill_ratio(f: str) -> float:
+            cap = max_load(f)
+            return faculty_load.get(f, 0) / cap if cap > 0 else float("inf")
+
+        return sorted(pref, key=fill_ratio)
 
     def _patterns_for(sec: Section) -> List[List[str]]:
         """Ordered pool of day patterns to try for a section.
@@ -716,6 +819,7 @@ def build_schedule(
             ))
         else:
             raw.sort(key=lambda t: (time_sched._busyness(t, days), t.start.hour, t.start.minute))
+        raw.sort(key=lambda t: _group_bias(sec.course_number, days, t2m(t.start), t2m(t.stop)))
 
         for lec_slot in raw:
             if lec_slot.days_allowed and not all(d in lec_slot.days_allowed for d in days):
@@ -743,6 +847,67 @@ def build_schedule(
 
         return None
 
+    def _topup_underloaded(lab_by_parent: Dict[str, ScheduledSection]) -> None:
+        """Fill any prof still below their target load using leftover (TBA)
+        foundational sections — CS1 / CS2 / Data Structures — that anyone can
+        teach. This is a deliberate, narrow exception to the hard preference
+        rule: it assigns a prof to a course they're not listed as preferred for,
+        but only an already-placed TBA section and only to reach the prof's
+        target. Sections are marked `topup` so C19 records them as exceptions.
+        """
+        def underloaded() -> List[str]:
+            profs = [f for f in faculty_limits
+                     if f != "TBA" and max_load(f) > 0 and faculty_load.get(f, 0) < max_load(f)]
+            return sorted(profs, key=lambda f: faculty_load.get(f, 0) / max_load(f))
+
+        def feasible(fac: str, lec: ScheduledSection, lab: Optional[ScheduledSection]) -> bool:
+            if faculty_load.get(fac, 0) >= max_load(fac):
+                return False
+            same = sum(1 for s in lectures.values()
+                       if s.faculty == fac and s.course_number == lec.course_number)
+            if same >= 2:                                                      # C3
+                return False
+            new_days = set(faculty_days_map.get(fac, set())) | set(lec.days)
+            if lab:
+                new_days |= set(lab.days)
+            if len(new_days) > 4:                                              # C4
+                return False
+            # Faculty must be free (incl. 15-min gap) and within the 9 h span (C2)
+            # for both the lecture and, if present, its lab. Lecture and lab fall
+            # on different days (C9), so they can be checked independently.
+            if not time_sched._faculty_free(fac, lec.days, lec.start_time, lec.end_time):
+                return False
+            if time_sched._would_exceed_span(fac, lec.days, lec.start_time, lec.end_time):
+                return False
+            if lab:
+                if not time_sched._faculty_free(fac, lab.days, lab.start_time, lab.end_time):
+                    return False
+                if time_sched._would_exceed_span(fac, lab.days, lab.start_time, lab.end_time):
+                    return False
+            return True
+
+        tba_foundation = [s for s in lectures.values()
+                          if s.faculty == "TBA" and not s.is_lab
+                          and normalize(s.course_number) in FOUNDATION_COURSES]
+        for lec in tba_foundation:
+            lab = lab_by_parent.get(lec.section_id)
+            for fac in underloaded():
+                if not feasible(fac, lec, lab):
+                    continue
+                # Reassign faculty only — time/room/days are unchanged, so room
+                # and concurrency (C11) bookings stay valid; just block the prof.
+                time_sched._block_faculty(fac, lec.days, lec.start_time, lec.end_time)
+                faculty_days_map.setdefault(fac, set()).update(lec.days)
+                lec.faculty, lec.topup = fac, True
+                if lab:
+                    time_sched._block_faculty(fac, lab.days, lab.start_time, lab.end_time)
+                    faculty_days_map[fac].update(lab.days)
+                    lab.faculty, lab.topup = fac, True
+                faculty_load[fac] = faculty_load.get(fac, 0) + 1
+                print(f"[TOPUP] {lec.section_id} ({lec.course_number}) → {fac} "
+                      f"(was TBA; load now {faculty_load[fac]}/{max_load(fac)})")
+                break
+
     # ── main scheduling loop ──────────────────────────────────────────────────
 
     for sec in ordered:
@@ -764,10 +929,13 @@ def build_schedule(
             if chosen:
                 break
 
-        # Fallback: TBA faculty, any pattern
+        # Fallback: TBA faculty. Try day patterns least-loaded-first so TBA
+        # sections (e.g. grad courses whose preferred profs are all full) spread
+        # across the week instead of piling onto Monday.
         if not chosen:
             print(f"[WARN] {sec.id}: No faculty satisfied all constraints; trying TBA.")
-            for days in _patterns_for(sec):
+            tba_patterns = sorted(_patterns_for(sec), key=lambda p: sum(day_count.get(d, 0) for d in p))
+            for days in tba_patterns:
                 result = _try_assign(sec, "TBA", days, lec_min, False)
                 if result:
                     chosen = ("TBA", *result)
@@ -808,6 +976,7 @@ def build_schedule(
             has_lab=sec.lab_hours > 0,
             is_lab=False,
         )
+        _record_group_rep(sec.course_number, days, t2m(slot.start), t2m(slot.stop))
 
         # ── lab ───────────────────────────────────────────────────────────────
         if sec.lab_hours > 0:
@@ -855,9 +1024,13 @@ def build_schedule(
                 is_lab=True,
             ))
 
+    lab_by_parent = {lab.section_id.replace("-LAB", ""): lab for lab in labs}
+
+    # Top up under-target profs with leftover TBA foundational sections.
+    _topup_underloaded(lab_by_parent)
+
     # Interleave labs right after their parent lecture
     result: Dict[str, ScheduledSection] = {}
-    lab_by_parent = {lab.section_id.replace("-LAB", ""): lab for lab in labs}
     for sid, s in lectures.items():
         result[sid] = s
         if sid in lab_by_parent:
@@ -873,6 +1046,9 @@ def build_schedule(
 
 class ConstraintChecker:
     """Validates a completed schedule against all scheduling constraints."""
+
+    def __init__(self, fac_prefs: Optional[Dict[str, List[str]]] = None):
+        self.fac_prefs = fac_prefs or {}
 
     def run_all(
         self,
@@ -895,6 +1071,8 @@ class ConstraintChecker:
             ("C15 Lecture day patterns: MW / TTh / WF only",    self._c15_patterns),
             ("C16 Sections balanced across weekdays (≤ 40 %)",  self._c16_balance),
             ("C17 Lab starts at the same time as its lecture",   self._c17_lab_same_start),
+            ("C18 ≤ 2 graduate sections per faculty",            self._c18_grad_per_faculty),
+            ("C19 Faculty preference honored (hard constraint)", self._c19_pref_honored),
         ]
 
         print("\n══════════════════ CONSTRAINT VALIDATION ══════════════════")
@@ -1111,6 +1289,72 @@ class ConstraintChecker:
                 ok = False
         return ok
 
+    def _c18_grad_per_faculty(self, sections, _):
+        counts: Dict[str, int] = {}
+        for s in sections.values():
+            if not s.is_lab and is_grad(s.course_number):
+                counts[s.faculty] = counts.get(s.faculty, 0) + 1
+        ok = True
+        for fac, n in counts.items():
+            if fac != "TBA" and n > 2:
+                print(f"    {fac}: {n} graduate sections (max 2)")
+                ok = False
+        return ok
+
+    def _c19_pref_honored(self, sections, _):
+        ok = True
+        for sid, s in sections.items():
+            if s.faculty == "TBA" or s.is_lab:
+                continue
+            prefs = self.fac_prefs.get(s.course_number)
+            if prefs and s.faculty not in prefs:
+                if s.topup:
+                    print(f"    (exception) {sid}: {s.faculty} via underload top-up of {s.course_number}")
+                    continue
+                print(f"    {sid}: {s.faculty} not in preference list for {s.course_number}")
+                ok = False
+        return ok
+
+
+def check_non_overlap_groups(
+    sections: Dict[str, ScheduledSection],
+    groups: Dict[str, List[str]],
+) -> bool:
+    """Best-effort verification for data/non_overlap_groups.csv: for every pair
+    of courses within a group, at least one scheduled lecture section of each
+    course must not share a day/time with any section of the other — so a
+    student following the curriculum can register for one section of each
+    without a clash. Reports failures as warnings; does not raise.
+    """
+    if not groups:
+        return True
+
+    by_course: Dict[str, List[ScheduledSection]] = {}
+    for s in sections.values():
+        if not s.is_lab:
+            by_course.setdefault(normalize(s.course_number), []).append(s)
+
+    print("\n── NON-OVERLAP GROUP CHECK (data/non_overlap_groups.csv) ──")
+    all_ok = True
+    for grp, courses in groups.items():
+        present = [c for c in courses if c in by_course]
+        for i, c1 in enumerate(present):
+            for c2 in present[i + 1:]:
+                secs1, secs2 = by_course[c1], by_course[c2]
+                has_clear_pair = any(
+                    not blocks_overlap(a.days, t2m(a.start_time), t2m(a.end_time),
+                                       b.days, t2m(b.start_time), t2m(b.end_time))
+                    for a in secs1 for b in secs2
+                )
+                if has_clear_pair:
+                    print(f"  ✓ PASS  {grp}: {c1} / {c2} have a non-overlapping section pair")
+                else:
+                    print(f"  ✗ FAIL  {grp}: {c1} / {c2} — every section pair overlaps; "
+                          f"a student cannot take both without a conflict")
+                    all_ok = False
+    print("────────────────────────────────────────────────────────────\n")
+    return all_ok
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # EXPORTERS
@@ -1295,6 +1539,7 @@ def _run() -> None:
     faculty_limits = load_faculty_loads(dp("faculty_load.csv"))
     rooms          = load_rooms(dp("rooms.csv"))
     room_prefs     = load_room_preferences(dp("room_preferences.csv"))
+    overlap_groups = load_non_overlap_groups(dp("non_overlap_groups.csv"))
 
     course_titles = {normalize(c.number): c.name for c in courses}
     sections      = build_sections(courses, fac_prefs)
@@ -1302,10 +1547,12 @@ def _run() -> None:
     # Faculty, time, and room are now assigned jointly inside build_schedule.
     time_sched    = TimeSlotScheduler(timeslots)
     room_assigner = RoomAssigner(rooms, room_prefs)
-    scheduled     = build_schedule(sections, fac_prefs, faculty_limits, time_sched, room_assigner)
+    scheduled     = build_schedule(sections, fac_prefs, faculty_limits, time_sched, room_assigner,
+                                    non_overlap_groups=overlap_groups)
 
     print_summary(scheduled, courses, faculty_limits, time_sched.slot_load)
-    ConstraintChecker().run_all(scheduled, faculty_limits)
+    ConstraintChecker(fac_prefs).run_all(scheduled, faculty_limits)
+    check_non_overlap_groups(scheduled, overlap_groups)
     export_json(scheduled, courses, os.path.join(base, "schedule.json"))
     export_csv(scheduled, course_titles, os.path.join(base, "schedule.csv"))
 

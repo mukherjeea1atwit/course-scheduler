@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).parent.resolve()
 DATA_DIR = BASE_DIR / "data"
 sys.path.insert(0, str(BASE_DIR))
 
-from main import _run  # noqa: E402 — imported after path setup
+from main import _run  # noqa: E402
 
 app = FastAPI(title="WIT Scheduler API")
 app.add_middleware(
@@ -35,12 +35,13 @@ app.add_middleware(
 
 # ── File slug → filename map ──────────────────────────────────────────────────
 FILE_MAP: Dict[str, str] = {
-    "courses":          "course-list-Spring 27(Sheet1) (1).csv",
-    "preferences":      "prof_preferences.csv",
-    "faculty_load":     "faculty_load.csv",
-    "timings":          "timings.csv",
-    "rooms":            "rooms.csv",
-    "room_preferences": "room_preferences.csv",
+    "courses":            "course-list-Spring 27(Sheet1) (1).csv",
+    "preferences":        "prof_preferences.csv",
+    "faculty_load":       "faculty_load.csv",
+    "timings":            "timings.csv",
+    "rooms":              "rooms.csv",
+    "room_preferences":   "room_preferences.csv",
+    "non_overlap_groups": "non_overlap_groups.csv",
 }
 
 # ── Scheduler state ───────────────────────────────────────────────────────────
@@ -68,19 +69,12 @@ def _worker() -> None:
             _q.put(f"[ERROR] Scheduler crashed: {exc}\n")
         finally:
             _busy = False
-            _q.put(None)  # sentinel — signals stream end
+            _q.put(None)
 
 
-# ── CSV helpers ───────────────────────────────────────────────────────────────
-
-def _csv_path(slug: str) -> Path:
-    if slug not in FILE_MAP:
-        raise HTTPException(status_code=404, detail=f"Unknown file key: {slug}")
-    return DATA_DIR / FILE_MAP[slug]
-
+# ── Excel / CSV parsing ───────────────────────────────────────────────────────
 
 def _parse_excel(content: bytes) -> tuple[List[str], List[Dict[str, str]]]:
-    """Convert xlsx/xls bytes → (headers, rows)."""
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
     all_rows = list(ws.iter_rows(values_only=True))
@@ -99,6 +93,23 @@ def _parse_excel(content: bytes) -> tuple[List[str], List[Dict[str, str]]]:
     return headers, rows
 
 
+def _parse_csv_bytes(content: bytes) -> tuple[List[str], List[Dict[str, str]]]:
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    rows = list(reader)
+    headers = [k for k in (rows[0].keys() if rows else reader.fieldnames or []) if k]
+    clean = [{k: v for k, v in r.items() if k} for r in rows]
+    return headers, clean
+
+
+# ── CSV disk helpers ──────────────────────────────────────────────────────────
+
+def _csv_path(slug: str) -> Path:
+    if slug not in FILE_MAP:
+        raise HTTPException(status_code=404, detail=f"Unknown file key: {slug}")
+    return DATA_DIR / FILE_MAP[slug]
+
+
 def _read_csv(path: Path) -> List[Dict[str, str]]:
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
@@ -112,17 +123,16 @@ def _read_headers(path: Path) -> List[str]:
 
 
 def _write_csv(path: Path, rows: List[Dict[str, Any]], headers: List[str]) -> None:
-    """Atomic write via temp file + rename."""
-    fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
+    fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
             w.writeheader()
             w.writerows(rows)
-        os.replace(tmp_path, path)
+        os.replace(tmp, path)
     except Exception:
         try:
-            os.unlink(tmp_path)
+            os.unlink(tmp)
         except OSError:
             pass
         raise
@@ -137,8 +147,7 @@ def get_headers(slug: str):
 
 @app.get("/api/data/{slug}")
 def get_data(slug: str):
-    path = _csv_path(slug)
-    return _read_csv(path)
+    return _read_csv(_csv_path(slug))
 
 
 @app.put("/api/data/{slug}")
@@ -146,8 +155,7 @@ def put_data(slug: str, rows: List[Dict[str, Any]]):
     path = _csv_path(slug)
     if not rows:
         raise HTTPException(status_code=422, detail="Cannot save an empty table")
-    headers = list(rows[0].keys())
-    _write_csv(path, rows, headers)
+    _write_csv(path, rows, list(rows[0].keys()))
     return {"ok": True, "rows": len(rows)}
 
 
@@ -164,11 +172,7 @@ async def upload_data(slug: str, file: UploadFile = File(...)):
             raise HTTPException(status_code=422, detail=f"Could not read Excel file: {e}")
     else:
         try:
-            text = content.decode("utf-8-sig")
-            reader = csv.DictReader(io.StringIO(text))
-            rows = list(reader)
-            headers = [k for k in (rows[0].keys() if rows else reader.fieldnames or []) if k]
-            rows = [{k: v for k, v in r.items() if k} for r in rows]
+            headers, rows = _parse_csv_bytes(content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Could not read CSV: {e}")
 
@@ -230,7 +234,7 @@ async def run_stream():
 def get_schedule():
     path = BASE_DIR / "schedule.json"
     if not path.exists():
-        raise HTTPException(status_code=404, detail="No schedule generated yet — run the scheduler first")
+        raise HTTPException(status_code=404, detail="No schedule yet — run the scheduler first")
     with open(path) as f:
         return json.load(f)
 
