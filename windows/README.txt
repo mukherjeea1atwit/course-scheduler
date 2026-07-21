@@ -1,15 +1,19 @@
 WIT Class Scheduler — Windows Setup
 ====================================
 
+See the full README.md at the root of the project for detailed,
+step-by-step install and usage instructions. Quick version:
+
 First time setup:
-  1. Download install.bat from this folder (or the whole repo).
-  2. Double-click install.bat.
-     - It downloads the project (needs internet access).
-     - It installs Python packages into a private folder — nothing is
-       installed system-wide.
-     - Python 3.10+ must already be installed and on your PATH. If it
-       isn't, the installer will tell you where to get it.
+  1. Double-click install.bat.
+     - If Windows shows a SmartScreen warning, click "More info" then
+       "Run anyway" — this is normal for a downloaded script.
+     - It installs Python automatically if needed (no admin rights
+       required), downloads the project, and installs its packages into
+       a private folder — nothing is installed system-wide.
      - A "WIT Class Scheduler" shortcut is added to your Desktop.
+  2. If it fails partway through, it prints an [ERROR] line explaining
+     what to do; you can safely re-run install.bat as many times as needed.
 
 Running the scheduler:
   - Double-click the "WIT Class Scheduler" shortcut on your Desktop
