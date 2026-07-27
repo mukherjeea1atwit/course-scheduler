@@ -37,14 +37,28 @@ That's it — see [Using the scheduler](#using-the-scheduler) below.
 explaining what went wrong and what to do next (e.g. no internet, or a
 network/firewall blocking downloads — in that case ask your IT department to
 allow access to `github.com`, `python.org`, and `pypi.org`, or try on a
-different network such as personal hotspot). You can safely re-run
-`install.bat` as many times as you need — it picks up where it left off and
-won't duplicate anything.
+different network such as personal hotspot). It also writes a full log to
+`%USERPROFILE%\WIT-Class-Scheduler\install-log.txt` — send that file to
+whoever shared this app with you if you get stuck. You can safely re-run
+`install.bat` as many times as you need.
 
-### Updating later
+### Updating or repairing later
 
-Re-run `install.bat` any time. It pulls the latest project code and
-refreshes the installed packages, without needing to redo anything else.
+Re-run `install.bat` any time — to get a newer version, or to fix an
+installation that has stopped working.
+
+`install.bat` always performs a **clean install**: it stops any copy that is
+still running, deletes the previous installation and its Python environment
+entirely, then downloads and installs everything again from scratch. That
+makes it a reliable repair tool as well as an updater — there is no leftover
+state that can carry a problem forward.
+
+Because it starts from scratch, the input files are reset to the defaults
+that ship with the project. Your previous ones are **not** lost: they are
+copied to `%USERPROFILE%\WIT-Class-Scheduler\previous-data-<number>` first,
+and the installer prints that exact path when it finishes. If you had edited
+your input files, copy them from there back into the `data` folder of the
+new install.
 
 ---
 

@@ -1,0 +1,12 @@
+# Windows batch files are run by cmd.exe, which is unreliable with LF-only
+# line endings. Store them byte-for-byte with the CRLF endings they already
+# have, and never convert them.
+#
+# "-text" (no conversion at all) rather than "text eol=crlf" on purpose:
+# "text" normalises to LF *in the repository*, and raw.githubusercontent.com
+# serves the stored blob unconverted - so anyone downloading install.bat from
+# a raw link would get an LF-only file back. "-text" keeps CRLF in the blob,
+# so clones, ZIP archives and raw downloads all produce a working file.
+*.bat -text
+*.cmd -text
+*.ps1 -text

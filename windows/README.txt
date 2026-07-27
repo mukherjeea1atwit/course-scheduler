@@ -1,26 +1,45 @@
-WIT Class Scheduler — Windows Setup
-====================================
+WIT Class Scheduler - Windows Setup
+===================================
 
 See the full README.md at the root of the project for detailed,
 step-by-step install and usage instructions. Quick version:
 
-First time setup:
+Installing (and re-installing / updating):
   1. Double-click install.bat.
      - If Windows shows a SmartScreen warning, click "More info" then
-       "Run anyway" — this is normal for a downloaded script.
+       "Run anyway" - this is normal for a downloaded script.
      - It installs Python automatically if needed (no admin rights
        required), downloads the project, and installs its packages into
-       a private folder — nothing is installed system-wide.
+       a private folder - nothing is installed system-wide.
      - A "WIT Class Scheduler" shortcut is added to your Desktop.
-  2. If it fails partway through, it prints an [ERROR] line explaining
-     what to do; you can safely re-run install.bat as many times as needed.
+  2. If it fails, it prints an [ERROR] line explaining what to do, and
+     writes a full log to:
+        %USERPROFILE%\WIT-Class-Scheduler\install-log.txt
+     Send that log to whoever shared this app with you if you get stuck.
+
+  install.bat always does a CLEAN install: it stops any running copy,
+  deletes the previous installation and its Python environment, then
+  installs everything again from scratch. Run it as many times as you
+  like - to update to a newer version, or to repair a broken install.
+
+  Your existing input files (the data folder) are copied to
+     %USERPROFILE%\WIT-Class-Scheduler\previous-data-<number>
+  before the old copy is removed, and the installer prints that path at
+  the end. The fresh install starts from the default input files, so if
+  you had edited yours, copy them back from that folder.
 
 Running the scheduler:
   - Double-click the "WIT Class Scheduler" shortcut on your Desktop
     (or run.bat in this folder).
   - It starts the local server and opens http://localhost:8000 in your
-    browser.
+    browser once the server is actually ready.
   - To stop it, close the minimized "WIT Class Scheduler - Server" window.
 
-Updating to a newer version:
-  - Re-run install.bat; it pulls the latest code and re-installs packages.
+Notes for whoever maintains this:
+  - install.bat and run.bat must stay plain ASCII with CRLF line endings.
+    .gitattributes enforces this. cmd.exe is unreliable with LF-only batch
+    files, and non-ASCII bytes get mangled under legacy console codepages.
+  - install.bat re-runs itself from a copy in %TEMP%. Do not remove that:
+    cmd.exe reads a batch file by byte offset while executing it, so
+    re-downloading the project on top of the running install.bat used to
+    make the window close instantly with no error message.

@@ -263,7 +263,10 @@ def schedule():
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("╔══════════════════════════════════════════════╗")
-    print("║  WIT Class Scheduler  →  http://localhost:8000  ║")
-    print("╚══════════════════════════════════════════════╝")
+    # Plain ASCII: box-drawing characters raise UnicodeEncodeError when stdout
+    # is redirected on a Windows machine with a legacy (cp1252/cp437) locale,
+    # which kills the server before it starts listening.
+    print("==================================================")
+    print("  WIT Class Scheduler  ->  http://localhost:8000")
+    print("==================================================")
     uvicorn.run(app, host="0.0.0.0", port=8000)
