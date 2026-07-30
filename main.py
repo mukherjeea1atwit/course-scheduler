@@ -1319,12 +1319,20 @@ class ConstraintChecker:
 def check_non_overlap_groups(
     sections: Dict[str, ScheduledSection],
     groups: Dict[str, List[str]],
+    all_courses: Optional[List[Course]] = None,
 ) -> bool:
     """Best-effort verification for data/non_overlap_groups.csv: for every pair
     of courses within a group, at least one scheduled lecture section of each
     course must not share a day/time with any section of the other — so a
     student following the curriculum can register for one section of each
     without a clash. Reports failures as warnings; does not raise.
+
+    A group member that never made it onto the schedule is otherwise silently
+    ignored (the group just shrinks). `all_courses` (the loaded course list)
+    lets us tell the two ways that happens apart in the printed report: the
+    course_number isn't in the course list at all (near-certainly a typo or a
+    renamed course code, e.g. CYBR2500 vs COMP2500) vs. it's a real course
+    with 0 sections this term (nothing to schedule, not a data error).
     """
     if not groups:
         return True
@@ -1334,10 +1342,24 @@ def check_non_overlap_groups(
         if not s.is_lab:
             by_course.setdefault(normalize(s.course_number), []).append(s)
 
+    known_sections = {normalize(c.number): c.sections for c in (all_courses or [])}
+
     print("\n── NON-OVERLAP GROUP CHECK (data/non_overlap_groups.csv) ──")
     all_ok = True
     for grp, courses in groups.items():
         present = [c for c in courses if c in by_course]
+        missing = [c for c in courses if c not in by_course]
+        for c in missing:
+            if c not in known_sections:
+                print(f"  ⚠ SKIP  {grp}: {c} is not in the course list "
+                      f"(check for a typo or renamed course number) — not constrained")
+            else:
+                print(f"  ⚠ SKIP  {grp}: {c} has 0 sections in the course list "
+                      f"(not offered this term) — not constrained")
+        if len(present) < 2:
+            print(f"  ⚠ SKIP  {grp}: only {len(present)} of {len(courses)} course(s) "
+                  f"are actually scheduled — this group has no effect")
+            continue
         for i, c1 in enumerate(present):
             for c2 in present[i + 1:]:
                 secs1, secs2 = by_course[c1], by_course[c2]
@@ -1552,7 +1574,7 @@ def _run() -> None:
 
     print_summary(scheduled, courses, faculty_limits, time_sched.slot_load)
     ConstraintChecker(fac_prefs).run_all(scheduled, faculty_limits)
-    check_non_overlap_groups(scheduled, overlap_groups)
+    check_non_overlap_groups(scheduled, overlap_groups, courses)
     export_json(scheduled, courses, os.path.join(base, "schedule.json"))
     export_csv(scheduled, course_titles, os.path.join(base, "schedule.csv"))
 

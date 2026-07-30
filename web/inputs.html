@@ -67,7 +67,7 @@
 <div class="toolbar">
   <button class="btn" onclick="addRow()">+ Add Row</button>
   <button class="btn btn-save" onclick="saveData()">💾 Save</button>
-  <label class="upload-label">
+  <label class="upload-label" title="Pick any CSV or Excel file from your computer — it replaces this tab's data file. The file it replaces is kept, not deleted (saved as .old1, .old2, ...).">
     📂 Upload CSV / Excel <input type="file" accept=".csv,.xlsx,.xls,text/csv" onchange="uploadCSV(this)">
   </label>
   <button class="btn" id="dlTemplateBtn" onclick="downloadTemplate()" style="display:none">⬇ Download Template</button>
@@ -277,9 +277,10 @@ async function uploadCSV(input) {
     if (!res.ok) throw new Error(await res.text());
     const j = await res.json();
     dirty = false;
-    setStatus(`✓ Uploaded (${j.rows} rows)`, 'saved');
+    const backupNote = j.backup ? ` — previous file kept as ${j.backup}` : '';
+    setStatus(`✓ Uploaded (${j.rows} rows)${backupNote}`, 'saved');
     await loadData();
-    setTimeout(() => setStatus(''), 4000);
+    setTimeout(() => setStatus(''), 6000);
   } catch (e) {
     setStatus(`Upload failed: ${e.message}`, 'error');
   }

@@ -260,12 +260,12 @@
     COMP2500-2-LAB [LAB] W 10:00-11:45 | DOBBS 308
     COMP2500-3 [LEC] MW 17:15-18:45 | ANXCN 203
     COMP2500-3-LAB [LAB] T 17:15-19:00 | DOBBS 308
-    COMP2650-1 [LEC] TTh 13:00-14:30 | ANXCN 101
-    COMP2650-1-LAB [LAB] M 13:00-14:45 | ANXCN 105
+    COMP2650-1 [LEC] TTh 15:00-16:30 | ANXCN 101
+    COMP2650-1-LAB [LAB] M 15:00-16:45 | ANXCN 105
     COMP2650-2 [LEC] MW 08:00-09:30 | ANXCN 101
     COMP2650-2-LAB [LAB] Th 08:00-09:45 | ANXCN 105
-    COMP2650-3 [LEC] TTh 15:00-16:30 | ANXCN 101
-    COMP2650-3-LAB [LAB] W 15:00-16:45 | ANXCN 105
+    COMP2650-3 [LEC] TTh 13:00-14:30 | ANXCN 101
+    COMP2650-3-LAB [LAB] W 13:00-14:45 | ANXCN 105
     COMP2650-4 [LEC] MW 08:00-09:30 | WENTW 010
     COMP2650-4-LAB [LAB] T 08:00-09:45 | ANXCN 105
     COMP5750-1 [LEC] M 18:00-20:35 | ANXCN 107
@@ -296,9 +296,9 @@
     10:00-11:30: 3 section(s)
     10:00-11:45: 5 section(s)
     13:00-14:30: 3 section(s)
-    13:00-14:45: 2 section(s)
+    13:00-14:45: 1 section(s)
     15:00-16:30: 1 section(s)
-    15:00-16:45: 4 section(s)
+    15:00-16:45: 5 section(s)
     17:15-18:45: 4 section(s)
     17:15-19:00: 2 section(s)
     18:00-20:35: 4 section(s)
@@ -321,9 +321,9 @@
     10:00-11:30: 7 section(s)
     10:00-11:45: 1 section(s)
     13:00-14:30: 6 section(s)
-    13:00-14:45: 1 section(s)
+    13:00-14:45: 2 section(s)
     15:00-16:30: 6 section(s)
-    15:00-16:45: 2 section(s)
+    15:00-16:45: 1 section(s)
     17:15-18:45: 5 section(s)
     17:15-19:00: 1 section(s)
     18:00-20:35: 2 section(s)
@@ -378,12 +378,46 @@
 
 
 ── NON-OVERLAP GROUP CHECK (data/non_overlap_groups.csv) ──
-  ✓ PASS  Y1_SPRING: COMP1050 / COMP1200 have a non-overlapping section pair
-  ✓ PASS  Y2_FALL: COMP2000 / COMP2100 have a non-overlapping section pair
-  ✓ PASS  Y2_FALL: COMP2000 / COMP2650 have a non-overlapping section pair
-  ✓ PASS  Y2_FALL: COMP2100 / COMP2650 have a non-overlapping section pair
-  ✓ PASS  Y2_SPRING: COMP2350 / COMP3400 have a non-overlapping section pair
+  ✓ PASS  Y1_SPRING_CS: COMP1050 / COMP1200 have a non-overlapping section pair
+  ✓ PASS  Y2_FALL_CS: COMP2000 / COMP2100 have a non-overlapping section pair
+  ✓ PASS  Y2_SPRING_CS: COMP2350 / COMP2650 have a non-overlapping section pair
+  ⚠ SKIP  Y3_SUMMER_CS: COMP3350 has 0 sections in the course list (not offered this term) — not constrained
+  ⚠ SKIP  Y3_SUMMER_CS: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ✓ PASS  Y1_FALL_CY: COMP1000 / COMP1100 have a non-overlapping section pair
+  ✓ PASS  Y1_FALL_CY: COMP1000 / COMP2100 have a non-overlapping section pair
+  ✓ PASS  Y1_FALL_CY: COMP1100 / COMP2100 have a non-overlapping section pair
+  ⚠ SKIP  Y1_SPRING_CY: CYBR2500 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y1_SPRING_CY: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ✓ PASS  Y2_FALL_CY: COMP1200 / COMP2000 have a non-overlapping section pair
+  ✓ PASS  Y2_SPRING_CY: COMP2150 / COMP2350 have a non-overlapping section pair
+  ⚠ SKIP  Y3_FALL_CY: CYBR3500 is not in the course list (check for a typo or renamed course number) — not constrained
+  ✓ PASS  Y3_FALL_CY: COMP3100 / COMP3400 have a non-overlapping section pair
+  ⚠ SKIP  Y3_SUMMER_CY: CYBR3550 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y3_SUMMER_CY: CYBR3590 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y3_SUMMER_CY: only 0 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y4_SUMMER_CY: CYBR4550 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y4_SUMMER_CY: CYBR5500 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y4_SUMMER_CY: only 0 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y1_FALL_IT: COMP1010 has 0 sections in the course list (not offered this term) — not constrained
+  ⚠ SKIP  Y1_FALL_IT: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ✓ PASS  Y1_SPRING_IT: COMP1050 / COMP1100 have a non-overlapping section pair
+  ⚠ SKIP  Y2_FALL_IT: COMP2010 has 0 sections in the course list (not offered this term) — not constrained
+  ⚠ SKIP  Y2_FALL_IT: CYBR2500 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y2_FALL_IT: only 0 of 2 course(s) are actually scheduled — this group has no effect
+  ✓ PASS  Y2_SPRING_IT: COMP1150 / COMP2160 have a non-overlapping section pair
+  ✓ PASS  Y2_SPRING_IT: COMP1150 / COMP2650 have a non-overlapping section pair
+  ✓ PASS  Y2_SPRING_IT: COMP2160 / COMP2650 have a non-overlapping section pair
+  ⚠ SKIP  Y1_FALL_AI: AAIN1000 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y1_FALL_AI: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y2_FALL_AI: COMP3000 has 0 sections in the course list (not offered this term) — not constrained
+  ⚠ SKIP  Y2_FALL_AI: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y2_SPRING_AI: DATA3125 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y2_SPRING_AI: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y2_SPRING_DS: DATA3125 is not in the course list (check for a typo or renamed course number) — not constrained
+  ⚠ SKIP  Y2_SPRING_DS: only 1 of 2 course(s) are actually scheduled — this group has no effect
+  ⚠ SKIP  Y3_FALL_DS: DATA3010 has 0 sections in the course list (not offered this term) — not constrained
+  ⚠ SKIP  Y3_FALL_DS: only 1 of 2 course(s) are actually scheduled — this group has no effect
 ────────────────────────────────────────────────────────────
 
-✓ Exported 180 events → /Users/aakashmkj/WIT Class Scheduler/class-scheduler/clean/schedule.json
-✓ Exported Excel-style CSV → /Users/aakashmkj/WIT Class Scheduler/class-scheduler/clean/schedule.csv
+✓ Exported 180 events → /Users/aakashmkj/WIT Class Scheduler/class-scheduler/schedule.json
+✓ Exported Excel-style CSV → /Users/aakashmkj/WIT Class Scheduler/class-scheduler/schedule.csv

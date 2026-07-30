@@ -6,6 +6,7 @@ import io
 import json
 import os
 import queue
+import shutil
 import sys
 import tempfile
 import threading
@@ -93,13 +94,48 @@ def _parse_excel(content: bytes) -> tuple[List[str], List[Dict[str, str]]]:
     return headers, rows
 
 
+def _decode_csv_bytes(content: bytes) -> str:
+    """Best-effort decode for CSVs exported by Excel/Numbers/Sheets on any OS.
+
+    Plain UTF-8 fails on the "smart" quotes, en-dashes, and non-breaking
+    spaces that Excel commonly writes as Windows-1252 bytes. Fall back
+    through the encodings people actually export with; latin-1 maps every
+    byte 0-255 so it never raises and guarantees a result.
+    """
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return content.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("latin-1", errors="replace")
+
+
 def _parse_csv_bytes(content: bytes) -> tuple[List[str], List[Dict[str, str]]]:
-    text = content.decode("utf-8-sig")
+    text = _decode_csv_bytes(content)
     reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
     headers = [k for k in (rows[0].keys() if rows else reader.fieldnames or []) if k]
     clean = [{k: v for k, v in r.items() if k} for r in rows]
     return headers, clean
+
+
+def _backup_existing(path: Path) -> Path | None:
+    """Preserve the file about to be overwritten as '<name>.oldN<ext>'.
+
+    Never deletes or overwrites a prior backup — each upload bumps N so the
+    full history (including the original file the app shipped with) stays
+    on disk in the data/ folder.
+    """
+    if not path.exists():
+        return None
+    n = 1
+    while True:
+        backup_path = path.with_name(f"{path.stem}.old{n}{path.suffix}")
+        if not backup_path.exists():
+            break
+        n += 1
+    shutil.copy2(path, backup_path)
+    return backup_path
 
 
 # ── CSV disk helpers ──────────────────────────────────────────────────────────
@@ -178,8 +214,14 @@ async def upload_data(slug: str, file: UploadFile = File(...)):
 
     if not rows:
         raise HTTPException(status_code=422, detail="File has no data rows")
+
+    backup_path = _backup_existing(path)
     _write_csv(path, rows, headers)
-    return {"ok": True, "rows": len(rows)}
+    return {
+        "ok": True,
+        "rows": len(rows),
+        "backup": backup_path.name if backup_path else None,
+    }
 
 
 # ── Scheduler endpoints ───────────────────────────────────────────────────────

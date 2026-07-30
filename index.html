@@ -484,7 +484,7 @@
         .board-scroll {
             flex: 1;
             min-height: 0;
-            overflow-y: hidden;
+            overflow-y: auto;
             overflow-x: hidden;
             padding: 6px 10px 8px 10px;
         }
@@ -546,7 +546,12 @@
         }
 
         .week-grid {
-            grid-template-rows: auto auto;
+            grid-template-rows: auto 1fr;
+        }
+
+        .week-grid .corner {
+            background: var(--gray-25);
+            border-right: 1px solid var(--gray-100);
         }
 
         .day-labels span {
@@ -1095,11 +1100,12 @@
                             <div class="board-sub">See a professor’s full week at a glance (Mon–Fri).</div>
                         </div>
                         <div class="board-scroll">
-                            <div class="grid">
+                            <div class="grid week-grid">
+                                <div class="corner"></div>
+                                <div class="day-labels" id="daylabels-prof"></div>
                                 <div class="times" id="timesCol-prof"></div>
                                 <div class="canvas" id="canvas-prof">
                                     <div class="column-guides" id="guides-prof"></div>
-                                    <div class="day-labels" id="daylabels-prof"></div>
                                 </div>
                             </div>
                         </div>
@@ -1115,11 +1121,12 @@
                             <div class="board-sub">Check what is scheduled in a specific room.</div>
                         </div>
                         <div class="board-scroll">
-                            <div class="grid">
+                            <div class="grid week-grid">
+                                <div class="corner"></div>
+                                <div class="day-labels" id="daylabels-room"></div>
                                 <div class="times" id="timesCol-room"></div>
                                 <div class="canvas" id="canvas-room">
                                     <div class="column-guides" id="guides-room"></div>
-                                    <div class="day-labels" id="daylabels-room"></div>
                                 </div>
                             </div>
                         </div>
@@ -1135,11 +1142,12 @@
                             <div class="board-sub">Compare all sections of a selected course.</div>
                         </div>
                         <div class="board-scroll">
-                            <div class="grid">
+                            <div class="grid week-grid">
+                                <div class="corner"></div>
+                                <div class="day-labels" id="daylabels-section"></div>
                                 <div class="times" id="timesCol-section"></div>
                                 <div class="canvas" id="canvas-section">
                                     <div class="column-guides" id="guides-section"></div>
-                                    <div class="day-labels" id="daylabels-section"></div>
                                 </div>
                             </div>
                         </div>
@@ -1170,8 +1178,10 @@
     <script>
         /* ---------- config ---------- */
         const START_HOUR = 8;
-        const END_HOUR = 22;
-        const HOUR_HEIGHT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hour-height')) || 36;
+        const END_HOUR = 20; // 8 PM
+        const MIN_HOUR_HEIGHT = 20;
+        const MAX_HOUR_HEIGHT = 64;
+        let HOUR_HEIGHT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hour-height')) || 36;
         const TRACKS_DAY = 10;   // day & section use full 10 columns
         const DAYS = ["M", "T", "W", "Th", "F"];
         const dayMap = { M: "Mon", T: "Tue", W: "Wed", Th: "Thu", F: "Fri" };
@@ -1281,8 +1291,26 @@
         const gapPx = () =>
             parseInt(getComputedStyle(document.documentElement).getPropertyValue('--track-gap')) || 8;
 
+        // Fit the whole 8am–8pm grid inside the visible board-scroll area so it
+        // never gets clipped (overflow-y:hidden) or needs to scroll on shorter screens.
+        function computeHourHeight(containerCanvas) {
+            const totalHours = END_HOUR - START_HOUR;
+            const boardScroll = containerCanvas.closest('.board-scroll');
+            if (!boardScroll) return HOUR_HEIGHT;
+            const grid = containerCanvas.closest('.grid');
+            let available = boardScroll.clientHeight;
+            const dayLabels = grid ? grid.querySelector(':scope > .day-labels') : null;
+            if (dayLabels) available -= dayLabels.offsetHeight;
+            available -= 2; // border/rounding safety margin
+            if (available <= 0) return HOUR_HEIGHT;
+            const h = Math.floor(available / totalHours);
+            return Math.min(MAX_HOUR_HEIGHT, Math.max(MIN_HOUR_HEIGHT, h));
+        }
+
         function buildTimeAxis(containerTimes, containerCanvas) {
             const totalH = END_HOUR - START_HOUR;
+            HOUR_HEIGHT = computeHourHeight(containerCanvas);
+            containerCanvas.style.setProperty('--hour-height', HOUR_HEIGHT + "px");
             const colH = totalH * HOUR_HEIGHT;
             containerTimes.style.height = colH + "px";
             containerCanvas.style.height = colH + "px";
@@ -1429,6 +1457,7 @@
 
             // Clear previous events + tooltips (keep hour-lines & guides container)
             canvas.querySelectorAll('.event,.tooltip').forEach(n => n.remove());
+            buildTimeAxis(dom.timesDay, dom.canvasDay);
             buildGuides(dom.guidesDay, TRACKS_DAY);
 
             const filtered = EVENTS.filter(e => e.day === day);
@@ -1560,8 +1589,9 @@
             const canvas = dom.canvasProf;
 
             canvas.querySelectorAll('.event,.tooltip').forEach(n => n.remove());
-            buildGuides(dom.guidesProf, DAYS.length);
             buildDayLabels(dom.labelsProf);
+            buildTimeAxis(dom.timesProf, dom.canvasProf);
+            buildGuides(dom.guidesProf, DAYS.length);
 
             if (prof === '__ALL__') {
                 dom.legendProf.textContent = "Select a professor to view Monday–Friday.";
@@ -1641,8 +1671,9 @@
             const canvas = dom.canvasRoom;
 
             canvas.querySelectorAll('.event,.tooltip').forEach(n => n.remove());
-            buildGuides(dom.guidesRoom, DAYS.length);
             buildDayLabels(dom.labelsRoom);
+            buildTimeAxis(dom.timesRoom, dom.canvasRoom);
+            buildGuides(dom.guidesRoom, DAYS.length);
 
             if (room === '__ALL__') {
                 dom.legendRoom.textContent = "Select a room to view Monday–Friday.";
@@ -1720,8 +1751,9 @@
             const canvas = dom.canvasSection;
 
             canvas.querySelectorAll('.event,.tooltip').forEach(n => n.remove());
-            buildGuides(dom.guidesSection, DAYS.length);
             buildDayLabels(dom.labelsSection);
+            buildTimeAxis(dom.timesSection, dom.canvasSection);
+            buildGuides(dom.guidesSection, DAYS.length);
 
             if (course === '__ALL__') {
                 dom.legendSection.textContent = "Select a course to compare its sections over the week.";
@@ -1907,18 +1939,17 @@
             buildTimeAxis(dom.timesDay, dom.canvasDay);
             buildGuides(dom.guidesDay, TRACKS_DAY);
 
+            buildDayLabels(dom.labelsProf);
             buildTimeAxis(dom.timesProf, dom.canvasProf);
             buildGuides(dom.guidesProf, DAYS.length);
-            buildDayLabels(dom.labelsProf);
 
+            buildDayLabels(dom.labelsRoom);
             buildTimeAxis(dom.timesRoom, dom.canvasRoom);
             buildGuides(dom.guidesRoom, DAYS.length);
-            buildDayLabels(dom.labelsRoom);
 
+            buildDayLabels(dom.labelsSection);
             buildTimeAxis(dom.timesSection, dom.canvasSection);
             buildGuides(dom.guidesSection, DAYS.length);
-            buildDayLabels(dom.labelsSection);
-
         }
 
         const printBtn = document.getElementById('printBtn');

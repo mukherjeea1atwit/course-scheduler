@@ -1685,8 +1685,8 @@
     "course": "COMP2650-1",
     "prof": "TBA",
     "room": "ANXCN 101",
-    "start": "13:00",
-    "end": "14:30",
+    "start": "15:00",
+    "end": "16:30",
     "isLab": false
   },
   {
@@ -1695,8 +1695,8 @@
     "course": "COMP2650-1",
     "prof": "TBA",
     "room": "ANXCN 101",
-    "start": "13:00",
-    "end": "14:30",
+    "start": "15:00",
+    "end": "16:30",
     "isLab": false
   },
   {
@@ -1705,8 +1705,8 @@
     "course": "COMP2650-1",
     "prof": "TBA",
     "room": "ANXCN 105",
-    "start": "13:00",
-    "end": "14:45",
+    "start": "15:00",
+    "end": "16:45",
     "isLab": true
   },
   {
@@ -1745,8 +1745,8 @@
     "course": "COMP2650-3",
     "prof": "TBA",
     "room": "ANXCN 101",
-    "start": "15:00",
-    "end": "16:30",
+    "start": "13:00",
+    "end": "14:30",
     "isLab": false
   },
   {
@@ -1755,8 +1755,8 @@
     "course": "COMP2650-3",
     "prof": "TBA",
     "room": "ANXCN 101",
-    "start": "15:00",
-    "end": "16:30",
+    "start": "13:00",
+    "end": "14:30",
     "isLab": false
   },
   {
@@ -1765,8 +1765,8 @@
     "course": "COMP2650-3",
     "prof": "TBA",
     "room": "ANXCN 105",
-    "start": "15:00",
-    "end": "16:45",
+    "start": "13:00",
+    "end": "14:45",
     "isLab": true
   },
   {
