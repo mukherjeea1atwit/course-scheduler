@@ -1182,7 +1182,7 @@
         const MIN_HOUR_HEIGHT = 20;
         const MAX_HOUR_HEIGHT = 64;
         let HOUR_HEIGHT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hour-height')) || 36;
-        const TRACKS_DAY = 10;   // day & section use full 10 columns
+        const TRACKS_DAY = 10;   // hard cap — never more than 10 classes can run at once
         const DAYS = ["M", "T", "W", "Th", "F"];
         const dayMap = { M: "Mon", T: "Tue", W: "Wed", Th: "Thu", F: "Fri" };
         let currentView = 'day';
@@ -1372,6 +1372,54 @@
             return sorted;
         }
 
+        // Max number of events running at the same instant (sweep over start/end points).
+        function peakOverlap(events) {
+            const points = [];
+            for (const e of events) {
+                points.push([toMin(e.start), 1], [toMin(e.end), -1]);
+            }
+            points.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+            let cur = 0, peak = 0;
+            for (const [, delta] of points) {
+                cur += delta;
+                if (cur > peak) peak = cur;
+            }
+            return peak;
+        }
+
+        // Place an event inside one column, split into `trackCount` side-by-side slots.
+        // trackCount === 1 reproduces the original full-column geometry exactly.
+        function positionInDayColumn(block, dayIndex, track, trackCount, colW, outer, inner) {
+            const gap = gapPx();
+            if (outer === undefined) outer = (DAYS.length - 1) * gap / DAYS.length;
+            if (inner === undefined) inner = Math.min(4, gap);
+            if (trackCount < 2) inner = 0;
+            const trim = (outer + (trackCount - 1) * inner) / trackCount;
+            const subW = colW / trackCount;
+
+            block.style.left = `calc(${dayIndex * colW + track * subW}% + ${dayIndex * gap + track * (inner - trim)}px)`;
+            block.style.width = `calc(${subW}% - ${trim}px)`;
+        }
+
+        function buildDroppedChip(dropped) {
+            const labels = dropped.map(e => e.course || '(unknown)');
+            const shown = labels.slice(0, 6);
+            const extra = labels.length - shown.length;
+
+            const warn = document.createElement('span');
+            warn.className = 'chip';
+            warn.style.borderColor = '#fecaca';
+            warn.style.background = '#fef2f2';
+            warn.style.color = '#991b1b';
+            warn.style.whiteSpace = 'normal';
+            warn.style.maxWidth = '100%';
+            warn.textContent = `⚠ Hidden (too many overlaps): ${shown.join(', ')}${extra > 0 ? `, +${extra} more` : ''}`;
+            warn.title = dropped
+                .map(e => `${e.course || '(unknown)'} — ${e.prof || 'TBA'} ${e.start}–${e.end}`)
+                .join('\n');
+            return warn;
+        }
+
         function attachTooltip(block, ev, canvas) {
             let tip;
 
@@ -1458,25 +1506,20 @@
             // Clear previous events + tooltips (keep hour-lines & guides container)
             canvas.querySelectorAll('.event,.tooltip').forEach(n => n.remove());
             buildTimeAxis(dom.timesDay, dom.canvasDay);
-            buildGuides(dom.guidesDay, TRACKS_DAY);
 
             const filtered = EVENTS.filter(e => e.day === day);
+            // Hard cap: never more than 10 concurrent classes can actually be scheduled
+            // (room/resource limit), so this never grows past TRACKS_DAY.
+            buildGuides(dom.guidesDay, TRACKS_DAY);
             const placed = assignTracks(filtered, TRACKS_DAY);
 
             // Legend (unique professors)
             const profs = [...new Set(filtered.map(e => e.prof))];
             dom.legendDay.innerHTML = "";
 
-            // If too many overlaps, some events will be dropped (_track === -1)
-            const droppedCount = placed.filter(e => e._track === -1).length;
-            if (droppedCount > 0) {
-                const warn = document.createElement('span');
-                warn.className = 'chip';
-                warn.style.borderColor = '#fecaca';
-                warn.style.background = '#fef2f2';
-                warn.style.color = '#991b1b';
-                warn.textContent = `⚠ ${droppedCount} class(es) hidden (too many overlaps).`;
-                dom.legendDay.appendChild(warn);
+            const dropped = placed.filter(e => e._track === -1);
+            if (dropped.length > 0) {
+                dom.legendDay.appendChild(buildDroppedChip(dropped));
             }
 
             for (const p of profs) {
@@ -1506,13 +1549,9 @@
                 const top = topFromStart(sMin);
                 const h = heightFrom(sMin, eMin);
 
-                const colW = 93.1 / TRACKS_DAY;
-                const leftPct = ev._track * colW;
-
                 block.style.top = `${top}px`;
                 block.style.height = `${h}px`;
-                block.style.left = `calc(${leftPct}% + ${(ev._track > 0 ? ev._track * gapPx() : 0)}px)`;
-                block.style.width = `calc(${colW}% - ${(TRACKS_DAY - 1) * gapPx() / TRACKS_DAY}px)`;
+                positionInDayColumn(block, 0, ev._track, TRACKS_DAY, 100, 0, gapPx());
 
                 block.dataset.tbd = String(ev.prof === 'TBA');
                 block.dataset.lab = String(!!ev.isLab);
@@ -1615,16 +1654,17 @@
             chip2.append("Lab");
             dom.legendProf.append(chip1, chip2);
 
+            const allDropped = [];
             for (let i = 0; i < DAYS.length; i++) {
                 const d = DAYS[i];
-                const events = EVENTS
-                    .filter(e => e.prof === prof && e.day === d)
-                    .sort((a, b) => toMin(a.start) - toMin(b.start));
-
+                const dayEvents = EVENTS.filter(e => e.prof === prof && e.day === d);
                 const colW = 96.5 / DAYS.length;
-                const leftPct = i * colW;
+                const trackCount = Math.min(TRACKS_DAY, Math.max(1, peakOverlap(dayEvents)));
+                const events = assignTracks(dayEvents, trackCount);
 
                 for (const ev of events) {
+                    if (ev._track === -1) { allDropped.push(ev); continue; }
+
                     const block = document.createElement('div');
                     block.className = 'event';
 
@@ -1633,8 +1673,7 @@
 
                     block.style.top = `${top}px`;
                     block.style.height = `${h}px`;
-                    block.style.left = `calc(${leftPct}% + ${(i) * gapPx()}px)`;
-                    block.style.width = `calc(${colW}% - ${(DAYS.length - 1) * gapPx() / DAYS.length}px)`;
+                    positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
                     block.style.setProperty('--stripe', ev.isLab ? 'var(--lab)' : 'var(--lec)');
@@ -1662,6 +1701,9 @@
                     attachTooltip(block, ev, canvas, ((i + 0.5) * (canvas.clientWidth / DAYS.length)));
                     canvas.appendChild(block);
                 }
+            }
+            if (allDropped.length > 0) {
+                dom.legendProf.appendChild(buildDroppedChip(allDropped));
             }
         }
 
@@ -1694,16 +1736,17 @@
                 dom.legendRoom.appendChild(chip);
             }
 
+            const allDropped = [];
             for (let i = 0; i < DAYS.length; i++) {
                 const d = DAYS[i];
-                const events = roomEvents
-                    .filter(e => e.day === d)
-                    .sort((a, b) => toMin(a.start) - toMin(b.start));
-
+                const dayEvents = roomEvents.filter(e => e.day === d);
                 const colW = 100 / DAYS.length;
-                const leftPct = i * colW;
+                const trackCount = Math.min(TRACKS_DAY, Math.max(1, peakOverlap(dayEvents)));
+                const events = assignTracks(dayEvents, trackCount);
 
                 for (const ev of events) {
+                    if (ev._track === -1) { allDropped.push(ev); continue; }
+
                     const block = document.createElement('div');
                     block.className = 'event';
 
@@ -1712,8 +1755,7 @@
 
                     block.style.top = `${top}px`;
                     block.style.height = `${h}px`;
-                    block.style.left = `calc(${leftPct}% + ${(i) * gapPx()}px)`;
-                    block.style.width = `calc(${colW}% - ${(DAYS.length - 1) * gapPx() / DAYS.length}px)`;
+                    positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
                     block.style.setProperty('--stripe', getCourseColor(ev.course));
@@ -1741,6 +1783,9 @@
                     attachTooltip(block, ev, canvas, ((i + 0.5) * (canvas.clientWidth / DAYS.length)));
                     canvas.appendChild(block);
                 }
+            }
+            if (allDropped.length > 0) {
+                dom.legendRoom.appendChild(buildDroppedChip(allDropped));
             }
         }
 
@@ -1777,16 +1822,17 @@
                 dom.legendSection.appendChild(chip);
             });
 
+            const allDropped = [];
             for (let i = 0; i < DAYS.length; i++) {
                 const d = DAYS[i];
-                const events = courseEvents
-                    .filter(e => e.day === d)
-                    .sort((a, b) => toMin(a.start) - toMin(b.start));
-
+                const dayEvents = courseEvents.filter(e => e.day === d);
                 const colW = 100 / DAYS.length;
-                const leftPct = i * colW;
+                const trackCount = Math.min(TRACKS_DAY, Math.max(1, peakOverlap(dayEvents)));
+                const events = assignTracks(dayEvents, trackCount);
 
                 for (const ev of events) {
+                    if (ev._track === -1) { allDropped.push(ev); continue; }
+
                     const block = document.createElement('div');
                     block.className = 'event';
 
@@ -1795,8 +1841,7 @@
 
                     block.style.top = `${top}px`;
                     block.style.height = `${h}px`;
-                    block.style.left = `calc(${leftPct}% + ${(i) * gapPx()}px)`;
-                    block.style.width = `calc(${colW}% - ${(DAYS.length - 1) * gapPx() / DAYS.length}px)`;
+                    positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
                     block.style.setProperty('--stripe', getProfColor(ev.prof));
@@ -1832,6 +1877,9 @@
                     attachTooltip(block, ev, canvas, ((i + 0.5) * (canvas.clientWidth / DAYS.length)));
                     canvas.appendChild(block);
                 }
+            }
+            if (allDropped.length > 0) {
+                dom.legendSection.appendChild(buildDroppedChip(allDropped));
             }
         }
 

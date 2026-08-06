@@ -44,6 +44,10 @@ RESERVED_START  = 12 * 60   # Tue/Thu 12:00 reserved (minutes from midnight)
 RESERVED_END    = 13 * 60   # Tue/Thu 13:00 — ends at 1 PM so 1:00 PM slots are free
 AM_CUTOFF_HR    = 12        # hours before this = AM
 AM_TARGET_RATIO = 0.60      # 60 % of undergrad meetings should be AM
+# Within the AM window and within the PM window, the earlier half of the available
+# start hours should take ~60 % of that window's meetings — stops everything piling
+# onto 8:00 (or 13:00) once a section has already been steered into a window.
+WINDOW_EARLY_RATIO = 0.60
 
 # Foundational courses anyone can teach — used to top up underloaded profs from
 # leftover (TBA) sections (CS1 / CS2 / Data Structures). Intentional, narrow
@@ -301,6 +305,21 @@ def load_faculty_loads(path: str) -> Dict[str, int]:
     return out
 
 
+def load_faculty_time_prefs(path: str) -> Dict[str, str]:
+    """Returns {faculty_name: "AM"|"PM"} for the optional `Time Preference` column.
+
+    Blank or unrecognized values are omitted, i.e. no preference.
+    """
+    out: Dict[str, str] = {}
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            name = (r.get("Faculty") or "").strip()
+            pref = (r.get("Time Preference") or "").strip().upper()
+            if name and pref in ("AM", "PM"):
+                out[name] = pref
+    return out
+
+
 def load_room_preferences(path: str) -> Dict[Tuple[str, str], List[RoomPreference]]:
     """Returns {(normalized_course, type_lower): [RoomPreference sorted by rank]}."""
     out: Dict[Tuple[str, str], List[RoomPreference]] = {}
@@ -483,9 +502,12 @@ class TimeSlotScheduler:
         *,
         force_pm: bool = False,
         max_duration: Optional[int] = None,
+        prefer=None,
     ) -> Optional[TimeSlot]:
         candidates = self._eligible_slots(sec, min_duration, force_pm=force_pm, max_duration=max_duration)
         ordered = sorted(candidates, key=lambda t: (self._busyness(t, days), t.start.hour, t.start.minute))
+        if prefer is not None:
+            ordered.sort(key=prefer)
 
         for slot in ordered:
             if slot.days_allowed and not all(d in slot.days_allowed for d in days):
@@ -599,6 +621,7 @@ def build_schedule(
     time_sched: TimeSlotScheduler,
     room_assigner: RoomAssigner,
     non_overlap_groups: Optional[Dict[str, List[str]]] = None,
+    faculty_time_prefs: Optional[Dict[str, str]] = None,
 ) -> Dict[str, ScheduledSection]:
     """
     Jointly assigns faculty + day pattern + time slot + room for each section so that
@@ -609,43 +632,82 @@ def build_schedule(
     labs: List[ScheduledSection] = []
 
     # ── non-overlap groups (data/non_overlap_groups.csv) ───────────────────────
-    # course_to_groups: normalized course number → list of group names it belongs to.
-    # group_reps: group → {course → (days_frozenset, start_min, end_min)} — the first
-    # non-overlapping time found for each course in the group; used to bias later
-    # sections of other group courses away from it (best-effort, checked at the end).
+    # A group is a cohort of courses the same students take simultaneously, e.g.
+    # Y1_FALL_AI = {COMP1000, AAIN1000}. We never require *every* section of a
+    # shared/gateway course (COMP1000) to dodge every section of a smaller,
+    # cohort-specific course (AAIN1000) — only enough of them to give each
+    # AAIN1000 section a non-conflicting COMP1000 option, since that's the
+    # number of students actually affected. A course can sit in several groups
+    # at once (COMP1000 also pairs with COMP1100 for Cyber, COMP1010 for IT,
+    # etc.) — group_reps and course_claimed_sections are shared across all of
+    # them so two different pairings don't both quietly reserve the *same*
+    # physical section and stack all of their students into it.
     non_overlap_groups = non_overlap_groups or {}
     course_to_groups: Dict[str, List[str]] = {}
     for grp, courses_in_grp in non_overlap_groups.items():
         for c in courses_in_grp:
             course_to_groups.setdefault(c, []).append(grp)
-    group_reps: Dict[str, Dict[str, Tuple[frozenset, int, int]]] = {}
 
-    def _group_bias(course_number: str, days: List[str], start_min: int, end_min: int) -> int:
-        """0 if this slot keeps a non-overlapping representative achievable for
-        every group this course belongs to, 1 if it would clash with another
-        course's already-established representative (deprioritized, not banned)."""
+    # How many sections of `cn` should try to stay clear of the rest of `grp`:
+    # the most sections any single groupmate has, since a groupmate with K
+    # sections may need up to K distinct non-conflicting times to cover all of
+    # them. Uses the actual section list being scheduled, not the nominal
+    # course-list count, so it tracks what's really being placed.
+    course_section_counts: Dict[str, int] = {}
+    for s in sections:
+        cn0 = normalize(s.course_number)
+        course_section_counts[cn0] = course_section_counts.get(cn0, 0) + 1
+
+    def _group_target(grp: str, cn: str) -> int:
+        partners = [normalize(c) for c in non_overlap_groups.get(grp, []) if normalize(c) != cn]
+        return max((course_section_counts.get(p, 1) or 1 for p in partners), default=1)
+
+    # group → {course → [(days_frozenset, start_min, end_min, section_id), ...]},
+    # capped at _group_target(grp, course) entries.
+    group_reps: Dict[str, Dict[str, List[Tuple[frozenset, int, int, str]]]] = {}
+    # course → section_ids already used as *someone's* rep, in any group — lets
+    # a still-unsatisfied pairing prefer a section nobody else has claimed yet.
+    course_claimed_sections: Dict[str, set] = {}
+
+    def _group_bias(course_number: str, section_id: str, days: List[str], start_min: int, end_min: int) -> int:
+        """0 = ideal (this course still needs reps in some group and this slot is
+        clear and unclaimed), 1 = clear but a section already claimed by a
+        different pairing (mild — risks stacking two pairings on one section),
+        2 = clashes with a groupmate's established rep (real conflict risk).
+        Purely an ordering preference; groups whose course already hit its
+        target are skipped, so it never fights other placed courses forever."""
+        cn = normalize(course_number)
+        penalty = 0
+        for grp in course_to_groups.get(cn, []):
+            reps = group_reps.get(grp, {}).get(cn, [])
+            if len(reps) >= _group_target(grp, cn):
+                continue  # this course already has enough reps for this group
+            for other_cn, other_reps in group_reps.get(grp, {}).items():
+                if other_cn == cn:
+                    continue
+                if any(blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e)
+                       for (o_days, o_s, o_e, _oid) in other_reps):
+                    penalty = 2
+            if penalty < 2 and section_id in course_claimed_sections.get(cn, set()):
+                penalty = max(penalty, 1)
+        return penalty
+
+    def _record_group_rep(course_number: str, section_id: str, days: List[str], start_min: int, end_min: int) -> None:
         cn = normalize(course_number)
         for grp in course_to_groups.get(cn, []):
-            reps = group_reps.get(grp, {})
-            if cn in reps:
-                continue  # this course already has a safe representative
-            for other_cn, (o_days, o_s, o_e) in reps.items():
-                if other_cn != cn and blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e):
-                    return 1
-        return 0
-
-    def _record_group_rep(course_number: str, days: List[str], start_min: int, end_min: int) -> None:
-        cn = normalize(course_number)
-        for grp in course_to_groups.get(cn, []):
-            reps = group_reps.setdefault(grp, {})
-            if cn in reps:
+            reps = group_reps.setdefault(grp, {}).setdefault(cn, [])
+            if len(reps) >= _group_target(grp, cn):
                 continue
             conflict = any(
-                other_cn != cn and blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e)
-                for other_cn, (o_days, o_s, o_e) in reps.items()
+                other_cn != cn and any(
+                    blocks_overlap(days, start_min, end_min, list(o_days), o_s, o_e)
+                    for (o_days, o_s, o_e, _oid) in other_reps
+                )
+                for other_cn, other_reps in group_reps[grp].items()
             )
             if not conflict:
-                reps[cn] = (frozenset(days), start_min, end_min)
+                reps.append((frozenset(days), start_min, end_min, section_id))
+                course_claimed_sections.setdefault(cn, set()).add(section_id)
 
     # ── integrated state ───────────────────────────────────────────────────────
     faculty_load: Dict[str, int] = {f: 0 for f in faculty_limits}
@@ -659,6 +721,23 @@ def build_schedule(
     )
     max_am = math.ceil(AM_TARGET_RATIO * total_ug)
     am_used = 0
+
+    # Intra-window (early/late) balance, undergrad only. The boundary is derived from
+    # the start hours timings.csv actually offers rather than hardcoded, so it stays
+    # correct if the slot menu changes: the distinct undergrad start hours in each
+    # window are sorted and the first half (rounded down, min 1) counts as "early".
+    faculty_time_prefs = faculty_time_prefs or {}
+    _ug_hours = sorted({t.start.hour for t in time_sched.slots if t.start.hour < GRAD_START_HR})
+    _am_hours = [h for h in _ug_hours if h < AM_CUTOFF_HR]
+    _pm_hours = [h for h in _ug_hours if h >= AM_CUTOFF_HR]
+    early_hours = set(_am_hours[:max(1, len(_am_hours) // 2)] + _pm_hours[:max(1, len(_pm_hours) // 2)])
+
+    # Counted against what has actually landed in each window, not against a projected
+    # cap: far fewer meetings reach the AM window than max_am allows, so a fixed
+    # ceiling there would never bind and every AM section would pile onto 08:00.
+    pm_used = 0
+    am_early_used = 0
+    pm_early_used = 0
 
     ordered = sorted(sections, key=lambda s: (schedule_priority(s), s.course_number, s.id))
 
@@ -791,6 +870,42 @@ def build_schedule(
                     return lab_day, lab_s, lab_room
         return None
 
+    def _window_balance_bias(t: "TimeSlot") -> int:
+        """0 if this slot sits in the half of its own window (AM or PM) that still
+        has early/late quota left, 1 otherwise. Purely an ordering preference — it
+        never removes a slot, because unlike force_pm there is no guaranteed
+        fallback once a section's window is already fixed."""
+        if t.start.hour >= GRAD_START_HR:
+            return 0
+        if t.start.hour < AM_CUTOFF_HR:
+            early_used, window_used = am_early_used, am_used
+        else:
+            early_used, window_used = pm_early_used, pm_used
+        want_early = early_used < math.ceil(WINDOW_EARLY_RATIO * (window_used + 1))
+        return 0 if (t.start.hour in early_hours) == want_early else 1
+
+    def _faculty_time_bias(fac: str, force_pm: bool, sec: Section):
+        """Sort key preferring a professor's declared AM/PM window, or None when it
+        doesn't apply (TBA has no identity; grad courses are evening-only; and a
+        section already forced into PM by the global 60 % AM quota can't honor an
+        AM preference — the hard quota wins)."""
+        if fac == "TBA" or force_pm or is_grad(sec.course_number):
+            return None
+        pref = faculty_time_prefs.get(fac)
+        if pref not in ("AM", "PM"):
+            return None
+        want_am = pref == "AM"
+        return lambda t: 0 if (t.start.hour < AM_CUTOFF_HR) == want_am else 1
+
+    def _order_fallback_slots(cands: List["TimeSlot"], days: List[str], force_pm: bool) -> List["TimeSlot"]:
+        """Order last-resort candidates the way _try_assign does, so forced
+        placements spread out instead of all landing on the first slot of the day."""
+        ordered_c = sorted(cands, key=lambda t: (time_sched._busyness(t, days), t.start.hour, t.start.minute))
+        ordered_c.sort(key=_window_balance_bias)
+        if force_pm:
+            ordered_c.sort(key=lambda t: 0 if t.start.hour >= AM_CUTOFF_HR else 1)
+        return ordered_c
+
     def _try_assign(
         sec: Section,
         fac: str,
@@ -819,7 +934,18 @@ def build_schedule(
             ))
         else:
             raw.sort(key=lambda t: (time_sched._busyness(t, days), t.start.hour, t.start.minute))
-        raw.sort(key=lambda t: _group_bias(sec.course_number, days, t2m(t.start), t2m(t.stop)))
+        # Sorts are stable, so each later .sort() is a higher-priority key. Priority,
+        # weakest to strongest: busyness → intra-window early/late balance → this
+        # professor's AM/PM preference → non-overlap groups. Faculty preference outranks
+        # the early/late balance because it is an explicit per-person input while the
+        # balance is a statistical goal that self-corrects over the whole term; in
+        # practice they rarely fight, since the preference picks the window (AM vs PM)
+        # and the balance key only picks a half *within* whichever window is chosen.
+        raw.sort(key=_window_balance_bias)
+        fac_bias = _faculty_time_bias(fac, force_pm, sec)
+        if fac_bias is not None:
+            raw.sort(key=fac_bias)
+        raw.sort(key=lambda t: _group_bias(sec.course_number, sec.id, days, t2m(t.start), t2m(t.stop)))
 
         for lec_slot in raw:
             if lec_slot.days_allowed and not all(d in lec_slot.days_allowed for d in days):
@@ -936,7 +1062,7 @@ def build_schedule(
             print(f"[WARN] {sec.id}: No faculty satisfied all constraints; trying TBA.")
             tba_patterns = sorted(_patterns_for(sec), key=lambda p: sum(day_count.get(d, 0) for d in p))
             for days in tba_patterns:
-                result = _try_assign(sec, "TBA", days, lec_min, False)
+                result = _try_assign(sec, "TBA", days, lec_min, force_pm)
                 if result:
                     chosen = ("TBA", *result)
                     break
@@ -946,7 +1072,10 @@ def build_schedule(
             print(f"[CRITICAL] {sec.id}: No assignment found; forcing.")
             days_f = _patterns_for(sec)[0]
             per_day_f = per_meeting_min(lec_min, len(days_f))
-            cands = time_sched._eligible_slots(sec, per_day_f, force_pm=False, max_duration=None)
+            cands = time_sched._eligible_slots(sec, per_day_f, force_pm=force_pm, max_duration=None)
+            if not cands:   # PM filter left nothing — better a placed AM section than none
+                cands = time_sched._eligible_slots(sec, per_day_f, force_pm=False, max_duration=None)
+            cands = _order_fallback_slots(cands, days_f, force_pm)
             slot_f = cands[0] if cands else time_sched.slots[0]
             lab_info_f = _find_lab_at("TBA", days_f, slot_f) if sec.lab_hours > 0 else None
             chosen = ("TBA", days_f, slot_f, "FORCE_ASSIGN_ROOM",
@@ -963,6 +1092,12 @@ def build_schedule(
             day_count[d] += 1
         if not is_grad(sec.course_number):
             am_used += 1 if slot.start.hour < AM_CUTOFF_HR else 0
+            pm_used += 1 if slot.start.hour >= AM_CUTOFF_HR else 0
+            if slot.start.hour in early_hours:
+                if slot.start.hour < AM_CUTOFF_HR:
+                    am_early_used += 1
+                else:
+                    pm_early_used += 1
 
         lectures[sec.id] = ScheduledSection(
             section_id=sec.id,
@@ -976,7 +1111,7 @@ def build_schedule(
             has_lab=sec.lab_hours > 0,
             is_lab=False,
         )
-        _record_group_rep(sec.course_number, days, t2m(slot.start), t2m(slot.stop))
+        _record_group_rep(sec.course_number, sec.id, days, t2m(slot.start), t2m(slot.stop))
 
         # ── lab ───────────────────────────────────────────────────────────────
         if sec.lab_hours > 0:
@@ -990,14 +1125,23 @@ def build_schedule(
                 lab_day_candidates = _lab_day_candidates(fac, days)
                 lab_slot = None
                 lab_day = lab_day_candidates[0] if lab_day_candidates else ALL_DAYS[0]
-                for ld in lab_day_candidates:
-                    lab_slot = time_sched.find_slot(sec, fac, [ld], lab_min, max_duration=LAB_MAX_MIN)
+                # Honor the AM quota first, but retry without it rather than let a lab
+                # fall through to the CRITICAL path purely because PM was full.
+                for pm_only in ((True, False) if force_pm else (False,)):
+                    for ld in lab_day_candidates:
+                        lab_slot = time_sched.find_slot(sec, fac, [ld], lab_min, force_pm=pm_only,
+                                                        max_duration=LAB_MAX_MIN, prefer=_window_balance_bias)
+                        if lab_slot:
+                            lab_day = ld
+                            break
                     if lab_slot:
-                        lab_day = ld
                         break
                 if lab_slot is None:
                     print(f"[CRITICAL] {sec.id}-LAB: No time slot found; forcing.")
-                    cands = time_sched._eligible_slots(sec, lab_min, force_pm=False, max_duration=LAB_MAX_MIN)
+                    cands = time_sched._eligible_slots(sec, lab_min, force_pm=force_pm, max_duration=LAB_MAX_MIN)
+                    if not cands:
+                        cands = time_sched._eligible_slots(sec, lab_min, force_pm=False, max_duration=LAB_MAX_MIN)
+                    cands = _order_fallback_slots(cands, [lab_day], force_pm)
                     lab_slot = cands[0] if cands else time_sched.slots[0]
                 lab_room = room_assigner.find_room(sec, [lab_day], lab_slot.start, lab_slot.stop, is_lab=True)
                 if lab_room is None:
@@ -1010,6 +1154,12 @@ def build_schedule(
             day_count[lab_day] += 1
             if not is_grad(sec.course_number):
                 am_used += 1 if lab_slot.start.hour < AM_CUTOFF_HR else 0
+                pm_used += 1 if lab_slot.start.hour >= AM_CUTOFF_HR else 0
+                if lab_slot.start.hour in early_hours:
+                    if lab_slot.start.hour < AM_CUTOFF_HR:
+                        am_early_used += 1
+                    else:
+                        pm_early_used += 1
 
             labs.append(ScheduledSection(
                 section_id=f"{sec.id}-LAB",
@@ -1321,11 +1471,29 @@ def check_non_overlap_groups(
     groups: Dict[str, List[str]],
     all_courses: Optional[List[Course]] = None,
 ) -> bool:
-    """Best-effort verification for data/non_overlap_groups.csv: for every pair
-    of courses within a group, at least one scheduled lecture section of each
-    course must not share a day/time with any section of the other — so a
-    student following the curriculum can register for one section of each
-    without a clash. Reports failures as warnings; does not raise.
+    """Best-effort verification for data/non_overlap_groups.csv.
+
+    For every pair of courses within a group, we do NOT require every section
+    of both courses to avoid each other — only the cohort-specific course
+    (e.g. AAIN1000) needs every one of ITS sections to have a non-conflicting
+    option in the other (shared/gateway) course, since that's the actual
+    number of students affected. Sections of the shared course beyond what's
+    needed are free to overlap. Reports failures as warnings; does not raise.
+
+    Which course is "the cohort-specific one" is decided by how many *groups*
+    each course belongs to, not by section count. A truly shared course (e.g.
+    COMP1000) sits in several groups — one per cohort that needs it — while a
+    cohort-specific course sits in just one. That's a structural fact about
+    the curriculum, unlike section count, which can vary run to run for
+    reasons that have nothing to do with which course is "the shared one"
+    (e.g. the shared course happening to get only 1 section this term). Ties
+    in group count fall back to section count, same idea as before.
+
+    Also flags a related risk the coverage check alone can't see: if the SAME
+    specific section of a shared course is the *only* non-conflicting option
+    for two or more different pairings, every affected student across both
+    pairings would be funneled into that one section — a capacity/overflow
+    risk this tool can't rule out since it has no enrollment data, only timing.
 
     A group member that never made it onto the schedule is otherwise silently
     ignored (the group just shrinks). `all_courses` (the loaded course list)
@@ -1343,6 +1511,19 @@ def check_non_overlap_groups(
             by_course.setdefault(normalize(s.course_number), []).append(s)
 
     known_sections = {normalize(c.number): c.sections for c in (all_courses or [])}
+
+    # How many distinct groups each course shows up in — the primary signal
+    # for which side of a pairing is "the shared course" (many groups) vs.
+    # "the cohort-specific course" (typically just one).
+    group_membership: Dict[str, int] = {}
+    for courses_in_grp in groups.values():
+        for c in courses_in_grp:
+            group_membership[c] = group_membership.get(c, 0) + 1
+
+    # section_id → [(group, small_course, big_course), ...] it was the *sole*
+    # non-conflicting option for, across all pairings — used for the overflow-
+    # risk note below.
+    sole_option_usage: Dict[str, List[Tuple[str, str, str]]] = {}
 
     print("\n── NON-OVERLAP GROUP CHECK (data/non_overlap_groups.csv) ──")
     all_ok = True
@@ -1363,18 +1544,52 @@ def check_non_overlap_groups(
         for i, c1 in enumerate(present):
             for c2 in present[i + 1:]:
                 secs1, secs2 = by_course[c1], by_course[c2]
-                has_clear_pair = any(
-                    not blocks_overlap(a.days, t2m(a.start_time), t2m(a.end_time),
-                                       b.days, t2m(b.start_time), t2m(b.end_time))
-                    for a in secs1 for b in secs2
-                )
-                if has_clear_pair:
-                    print(f"  ✓ PASS  {grp}: {c1} / {c2} have a non-overlapping section pair")
+                g1, g2 = group_membership.get(c1, 1), group_membership.get(c2, 1)
+                if g1 != g2:
+                    # Fewer groups → more cohort-specific → this side needs full coverage.
+                    c1_is_small = g1 < g2
                 else:
-                    print(f"  ✗ FAIL  {grp}: {c1} / {c2} — every section pair overlaps; "
-                          f"a student cannot take both without a conflict")
+                    # Tied on group membership: fall back to whichever has fewer
+                    # scheduled sections, same heuristic as before.
+                    c1_is_small = len(secs1) <= len(secs2)
+                small, big = (secs1, secs2) if c1_is_small else (secs2, secs1)
+                small_name, big_name = (c1, c2) if c1_is_small else (c2, c1)
+
+                uncovered = []
+                for a in small:
+                    options = [
+                        b for b in big
+                        if not blocks_overlap(a.days, t2m(a.start_time), t2m(a.end_time),
+                                               b.days, t2m(b.start_time), t2m(b.end_time))
+                    ]
+                    if not options:
+                        uncovered.append(a.section_id)
+                    elif len(options) == 1:
+                        sole_option_usage.setdefault(options[0].section_id, []).append((grp, small_name, big_name))
+
+                if not uncovered:
+                    print(f"  ✓ PASS  {grp}: {small_name} / {big_name} — all {len(small)} "
+                          f"{small_name} section(s) have a non-conflicting {big_name} option")
+                else:
+                    print(f"  ✗ FAIL  {grp}: {small_name} / {big_name} — {len(uncovered)} of "
+                          f"{len(small)} {small_name} section(s) have no non-conflicting {big_name} "
+                          f"option ({', '.join(uncovered)}); a student in {'those sections' if len(uncovered) > 1 else 'that section'} cannot also take {big_name}")
                     all_ok = False
     print("────────────────────────────────────────────────────────────\n")
+
+    risk_lines = [
+        f"  ⚠ {sec_id} is the only non-conflicting option for {len(usage)} different pairings "
+        f"({'; '.join(f'{grp} ({small}→{big})' for grp, small, big in usage)}) — if each pairing has "
+        f"real enrollment, they'd all need seats in this one section"
+        for sec_id, usage in sole_option_usage.items() if len(usage) > 1
+    ]
+    if risk_lines:
+        print("── OVERFLOW RISK (same section is the sole option for multiple pairings) ──")
+        for line in risk_lines:
+            print(line)
+        print("This tool only checks timing, not enrollment — verify capacity by hand.")
+        print("────────────────────────────────────────────────────────────\n")
+
     return all_ok
 
 
@@ -1559,6 +1774,7 @@ def _run() -> None:
     fac_prefs      = load_faculty_preferences(dp("prof_preferences.csv"))
     timeslots      = load_timeslots(dp("timings.csv"))
     faculty_limits = load_faculty_loads(dp("faculty_load.csv"))
+    faculty_tprefs = load_faculty_time_prefs(dp("faculty_load.csv"))
     rooms          = load_rooms(dp("rooms.csv"))
     room_prefs     = load_room_preferences(dp("room_preferences.csv"))
     overlap_groups = load_non_overlap_groups(dp("non_overlap_groups.csv"))
@@ -1570,7 +1786,8 @@ def _run() -> None:
     time_sched    = TimeSlotScheduler(timeslots)
     room_assigner = RoomAssigner(rooms, room_prefs)
     scheduled     = build_schedule(sections, fac_prefs, faculty_limits, time_sched, room_assigner,
-                                    non_overlap_groups=overlap_groups)
+                                    non_overlap_groups=overlap_groups,
+                                    faculty_time_prefs=faculty_tprefs)
 
     print_summary(scheduled, courses, faculty_limits, time_sched.slot_load)
     ConstraintChecker(fac_prefs).run_all(scheduled, faculty_limits)
