@@ -1,3 +1,23 @@
 .DS_Store
 __pycache__/
 *.pyc
+business/
+
+# Generated schedule output — regenerated on every run, never hand-edited
+schedule.json
+schedule.csv
+schedule_simple.csv
+result.txt
+
+# Working notes and test data received from users (not part of the app)
+FARMER_FEEDBACK_TRIAGE.md
+CHANGES_FOR_MIKE.md
+math-test-data/
+
+# Loose input files dropped in the repo root; the app reads data/ only
+/course-list-*.csv
+/non_overlap_groups*.csv
+
+# Backups the input editor writes next to the file it replaced
+data/*.old*.csv
+data/*.bak

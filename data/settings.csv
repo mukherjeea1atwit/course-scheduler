@@ -1,0 +1,7 @@
+setting,value,description
+max_concurrent_sections,10,Maximum sections that may run at the same time (room/resource ceiling)
+max_daily_span_hours,9,Maximum hours between a professor's first and last class on one day
+max_teaching_days,4,Maximum distinct days a week a professor teaches
+faculty_gap_minutes,15,Minimum gap between back-to-back classes for the same professor
+default_faculty_load,3,Load assumed for a name that is missing from faculty_load.csv
+am_target_ratio,0.60,Share of undergraduate meetings that should be scheduled before noon

@@ -56,9 +56,47 @@ state that can carry a problem forward.
 Because it starts from scratch, the input files are reset to the defaults
 that ship with the project. Your previous ones are **not** lost: they are
 copied to `%USERPROFILE%\WIT-Class-Scheduler\previous-data-<number>` first,
-and the installer prints that exact path when it finishes. If you had edited
-your input files, copy them from there back into the `data` folder of the
-new install.
+and the installer prints that exact path when it finishes.
+
+### Which files to copy back
+
+If you had edited your input files, copy them from the backup folder into the
+`data` folder of the new install — but **not all of them**.
+
+**Safe to copy back** — these hold your own data:
+
+| File | What it holds |
+|---|---|
+| `course-list-Spring 27(Sheet1) (1).csv` | Your courses, sections, days/week |
+| `prof_preferences.csv` | Who can teach what |
+| `faculty_load.csv` | Teaching loads |
+| `rooms.csv`, `room_preferences.csv` | Your rooms |
+| `non_overlap_groups.csv` | Courses students take together |
+
+**Do NOT copy back** — these change with the software:
+
+| File | Why |
+|---|---|
+| `timings.csv` | New versions add time slots the scheduler needs. Restoring an old copy removes them. |
+| `meeting_patterns.csv` | Defines how long a class is for a given number of days a week. |
+| `settings.csv` | Tunables such as the number of parallel classes. |
+
+If you had edited `timings.csv` yourself (to add or change class times), open
+the old and new copies side by side and re-apply your changes to the **new**
+one, rather than replacing it.
+
+**How you will know if you got this wrong:** the run will report sections it
+could not place, naming the reason, for example:
+
+```
+[CRITICAL] MATH2600-1: cannot be placed — no 70-minute slot exists in
+timings.csv — add one, or change this course's meeting length in
+meeting_patterns.csv
+```
+
+Those sections also show in the schedule as red striped cards marked
+`UNPLACED`. If you see them straight after an update, an old `timings.csv` is
+the first thing to check.
 
 ---
 

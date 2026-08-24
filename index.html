@@ -485,8 +485,26 @@
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            overflow-x: hidden;
+            /* Horizontal scrolling so the grid can show more parallel classes than
+               fit the window. The grid gets an explicit min-width from
+               applyGridWidth(); below that it still fills the panel as before. */
+            overflow-x: auto;
             padding: 6px 10px 8px 10px;
+        }
+
+        /* Keep the hour column visible while the columns scroll under it. */
+        .grid > .times {
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: #fff;
+        }
+
+        .grid.week-grid > .corner {
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            background: #fff;
         }
 
         .grid {
@@ -692,6 +710,155 @@
         }
 
         /* Legend */
+        /* ---------- Course View table ---------- */
+        .course-scroll {
+            overflow-x: auto;
+        }
+
+        .course-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .course-table th,
+        .course-table td {
+            text-align: left;
+            padding: 7px 12px;
+            border-bottom: 1px solid var(--gray-100);
+            white-space: nowrap;
+        }
+
+        .course-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f9fafb;
+            font-size: 11px;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid var(--gray-200, #e5e7eb);
+        }
+
+        .course-table thead th:hover {
+            color: var(--gray-900, #111827);
+        }
+
+        .course-table thead th[data-dir]::after {
+            content: ' ▲';
+            font-size: 9px;
+        }
+
+        .course-table thead th[data-dir="desc"]::after {
+            content: ' ▼';
+        }
+
+        .course-table tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .course-table td.course-num {
+            font-weight: 600;
+        }
+
+        .course-table td.course-title {
+            white-space: normal;
+            color: var(--gray-600);
+        }
+
+        .course-type {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+
+        .course-type.lec {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .course-type.lab {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .course-tba {
+            color: #b91c1c;
+            font-weight: 600;
+        }
+
+        /* Unplaced sections: hatched red so they cannot be mistaken for a real
+           placement, and clearly distinct from the grey used for TBA faculty. */
+        .event[data-unplaced="true"] {
+            --stripe: #dc2626;
+            background: repeating-linear-gradient(45deg,
+                #fef2f2, #fef2f2 6px, #fee2e2 6px, #fee2e2 12px) !important;
+            border-color: #fecaca !important;
+            color: #7f1d1d;
+        }
+
+        .event[data-unplaced="true"] .event-room-row::after {
+            content: ' ⚠';
+        }
+
+        .chip-unplaced {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+            white-space: normal;
+            max-width: 100%;
+        }
+
+        .course-unplaced {
+            color: #b91c1c;
+            font-weight: 600;
+        }
+
+        .search-box {
+            font: inherit;
+            font-size: 13px;
+            padding: 7px 12px;
+            border: 1px solid var(--gray-200, #e5e7eb);
+            border-radius: 999px;
+            background: #fff;
+            color: inherit;
+            outline: none;
+        }
+
+        .search-box:focus {
+            border-color: var(--wit-red, #b91c1c);
+        }
+
+        .toast {
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            max-width: 420px;
+        }
+
+        .toast.ok {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+
+        .toast.err {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .course-empty {
+            padding: 24px 12px;
+            text-align: center;
+            color: var(--gray-600);
+            font-size: 13px;
+        }
+
         .legend {
             padding: 6px 14px 8px 14px;
             border-top: 1px solid var(--gray-100);
@@ -1019,6 +1186,15 @@
                                 </div>
                             </button>
                         </li>
+                        <li class="nav-item">
+                            <button class="nav-link view-link" data-tab="course">
+                                <div class="nav-icon">📚</div>
+                                <div class="nav-text-wrap">
+                                    <div class="nav-title">Course View</div>
+                                    <div class="nav-sub">Every course, when and who</div>
+                                </div>
+                            </button>
+                        </li>
                         <!-- <li class="nav-item">
                             <button class="nav-link view-link" data-tab="section">
                                 <div class="nav-icon">#</div>
@@ -1069,7 +1245,15 @@
                             <option value="__ALL__">Select Course…</option>
                         </select>
 
+                        <!-- Course View search -->
+                        <input class="search-box" id="courseSearch" type="search"
+                               placeholder="Search course, professor or room…"
+                               style="display:none;min-width:260px">
+
                     </div>
+                    <span class="toast" id="toast" hidden></span>
+                    <button type="button" id="downloadBtn" class="print-btn"
+                            title="Download the schedule as a CSV file">↓ CSV</button>
                     <button type="button" id="printBtn" class="print-btn">Print</button>
                 </div>
 
@@ -1134,6 +1318,34 @@
                     </div>
                 </section>
 
+                <!-- Course panel -->
+                <section class="panel" id="panel-course">
+                    <div class="board">
+                        <div class="board-header">
+                            <div class="board-title">Course View</div>
+                            <div class="board-sub">Every scheduled course — when it meets and who teaches it.</div>
+                        </div>
+                        <div class="board-scroll course-scroll">
+                            <table class="course-table" id="courseTable">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="course">Course</th>
+                                        <th data-sort="section">Sec</th>
+                                        <th data-sort="type">Type</th>
+                                        <th data-sort="days">Days</th>
+                                        <th data-sort="start">Time</th>
+                                        <th data-sort="prof">Faculty</th>
+                                        <th data-sort="room">Room</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="courseTableBody"></tbody>
+                            </table>
+                            <div class="course-empty" id="courseEmpty" hidden>No courses match that search.</div>
+                        </div>
+                        <div class="legend" id="legend-course"></div>
+                    </div>
+                </section>
+
                 <!-- Section panel -->
                 <section class="panel" id="panel-section">
                     <div class="board">
@@ -1182,7 +1394,47 @@
         const MIN_HOUR_HEIGHT = 20;
         const MAX_HOUR_HEIGHT = 64;
         let HOUR_HEIGHT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hour-height')) || 36;
-        const TRACKS_DAY = 10;   // hard cap — never more than 10 classes can run at once
+        // Hard cap on how many classes can run at once — a room/resource limit, not
+        // a display choice. Defaults to 10 and is overridden at load from
+        // data/settings.csv (max_concurrent_sections) so it stays in step with the
+        // scheduler's own ceiling. It is never grown automatically to fit content.
+        let TRACKS_DAY = 10;
+
+        // Every professor with a non-zero load in data/faculty_load.csv. The
+        // dropdown is built from this ∪ the schedule, so a professor who ended up
+        // with nothing is still listed — marked "(no sections)" — instead of
+        // silently vanishing. A missing name is the thing you most want to see.
+        let FACULTY_ROSTER = [];
+
+        async function loadFacultyRoster() {
+            try {
+                const res = await fetch('/api/data/faculty_load');
+                if (!res.ok) return;
+                const rows = await res.json();
+                FACULTY_ROSTER = rows
+                    .map(r => ({
+                        name: String(r.Faculty || '').trim(),
+                        load: parseFloat(r['CS Course Load']),
+                    }))
+                    .filter(r => r.name && Number.isFinite(r.load) && r.load > 0)
+                    .map(r => r.name);
+            } catch (err) {
+                console.warn('[scheduler] could not read faculty_load.csv', err);
+            }
+        }
+
+        async function loadTracksSetting() {
+            try {
+                const res = await fetch('/api/data/settings');
+                if (!res.ok) return;
+                const rows = await res.json();
+                const row = rows.find(r => (r.setting || '').trim() === 'max_concurrent_sections');
+                const n = parseInt(row && row.value, 10);
+                if (Number.isFinite(n) && n > 0) TRACKS_DAY = n;
+            } catch (err) {
+                console.warn('[scheduler] could not read max_concurrent_sections, using', TRACKS_DAY, err);
+            }
+        }
         const DAYS = ["M", "T", "W", "Th", "F"];
         const dayMap = { M: "Mon", T: "Tue", W: "Wed", Th: "Thu", F: "Fri" };
         let currentView = 'day';
@@ -1197,6 +1449,7 @@
             day: document.getElementById('panel-day'),
             prof: document.getElementById('panel-prof'),
             room: document.getElementById('panel-room'),
+            course: document.getElementById('panel-course'),
             section: document.getElementById('panel-section'),
         };
 
@@ -1205,6 +1458,7 @@
             profSelect: document.getElementById('profSelect'),
             roomSelect: document.getElementById('roomSelect'),
             courseSelect: document.getElementById('courseSelect'),
+            courseSearch: document.getElementById('courseSearch'),
         };
 
         const dom = {
@@ -1336,6 +1590,22 @@
             containerCanvas.appendChild(frag);
         }
 
+        // Narrowest a single class column may become before the board starts
+        // scrolling horizontally instead of squeezing cards further.
+        const MIN_TRACK_PX = 96;
+        const TIME_COL_PX = 80;
+
+        // Give the grid an explicit min-width when `columns` columns cannot fit
+        // legibly in the panel. Under that threshold the min-width is cleared and
+        // the grid fills the panel exactly as it always has.
+        function applyGridWidth(canvasEl, columns) {
+            const grid = canvasEl && canvasEl.closest('.grid');
+            if (!grid) return;
+            const needed = TIME_COL_PX + columns * MIN_TRACK_PX;
+            const available = grid.parentElement ? grid.parentElement.clientWidth : 0;
+            grid.style.minWidth = (available && needed > available) ? `${needed}px` : '';
+        }
+
         function buildGuides(container, cols) {
             container.innerHTML = "";
             container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
@@ -1399,6 +1669,26 @@
 
             block.style.left = `calc(${dayIndex * colW + track * subW}% + ${dayIndex * gap + track * (inner - trim)}px)`;
             block.style.width = `calc(${subW}% - ${trim}px)`;
+        }
+
+        // A section the scheduler could not place legally. main.py flags these in
+        // schedule.json; the room name is a fallback for older files.
+        function isUnplaced(ev) {
+            return !!ev.unplaced || ev.room === 'UNPLACED' || ev.room === 'FORCE_ASSIGN_ROOM';
+        }
+
+        function buildUnplacedChip(unplaced) {
+            const names = [...new Set(unplaced.map(e => e.course || '(unknown)'))];
+            const shown = names.slice(0, 6);
+            const extra = names.length - shown.length;
+
+            const warn = document.createElement('span');
+            warn.className = 'chip chip-unplaced';
+            warn.textContent = `⚠ Unplaced: ${shown.join(', ')}${extra > 0 ? `, +${extra} more` : ''}`;
+            warn.title = names.join('\n') +
+                '\n\nThese sections have no valid time, room, or faculty. ' +
+                'They are shown at a placeholder slot — fix the inputs and re-run.';
+            return warn;
         }
 
         function buildDroppedChip(dropped) {
@@ -1508,9 +1798,11 @@
             buildTimeAxis(dom.timesDay, dom.canvasDay);
 
             const filtered = EVENTS.filter(e => e.day === day);
-            // Hard cap: never more than 10 concurrent classes can actually be scheduled
-            // (room/resource limit), so this never grows past TRACKS_DAY.
+            // TRACKS_DAY is the room/resource ceiling from data/settings.csv. The grid
+            // never invents extra columns beyond it, but it does scroll sideways so
+            // every one of those columns stays readable when the cap is raised.
             buildGuides(dom.guidesDay, TRACKS_DAY);
+            applyGridWidth(dom.canvasDay, TRACKS_DAY);
             const placed = assignTracks(filtered, TRACKS_DAY);
 
             // Legend (unique professors)
@@ -1520,6 +1812,10 @@
             const dropped = placed.filter(e => e._track === -1);
             if (dropped.length > 0) {
                 dom.legendDay.appendChild(buildDroppedChip(dropped));
+            }
+            const unplaced = filtered.filter(isUnplaced);
+            if (unplaced.length > 0) {
+                dom.legendDay.appendChild(buildUnplacedChip(unplaced));
             }
 
             for (const p of profs) {
@@ -1555,6 +1851,7 @@
 
                 block.dataset.tbd = String(ev.prof === 'TBA');
                 block.dataset.lab = String(!!ev.isLab);
+                block.dataset.unplaced = String(isUnplaced(ev));
                 block.dataset.prof = ev.prof || '';
                 block.style.setProperty('--stripe', getProfColor(ev.prof));
 
@@ -1631,9 +1928,26 @@
             buildDayLabels(dom.labelsProf);
             buildTimeAxis(dom.timesProf, dom.canvasProf);
             buildGuides(dom.guidesProf, DAYS.length);
+            applyGridWidth(dom.canvasProf, DAYS.length * Math.max(1, ...DAYS.map(d =>
+                Math.min(TRACKS_DAY, Math.max(1, peakOverlap(
+                    EVENTS.filter(e => e.prof === prof && e.day === d)))))));
 
             if (prof === '__ALL__') {
                 dom.legendProf.textContent = "Select a professor to view Monday–Friday.";
+                return;
+            }
+
+            // A professor on the roster with nothing assigned renders an empty week,
+            // which reads as a loading failure. Say what actually happened.
+            if (!EVENTS.some(e => e.prof === prof)) {
+                dom.legendProf.innerHTML = '';
+                const chip = document.createElement('span');
+                chip.className = 'chip chip-unplaced';
+                chip.textContent = `⚠ ${prof} has no sections assigned`;
+                chip.title = 'This professor has a teaching load in faculty_load.csv but ' +
+                    'received no sections. Check that their name is spelled the same way ' +
+                    'in prof_preferences.csv, and that the courses they prefer are offered.';
+                dom.legendProf.appendChild(chip);
                 return;
             }
 
@@ -1676,6 +1990,7 @@
                     positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
+                    block.dataset.unplaced = String(isUnplaced(ev));
                     block.style.setProperty('--stripe', ev.isLab ? 'var(--lab)' : 'var(--lec)');
 
                     const titleRow = document.createElement('div');
@@ -1705,6 +2020,10 @@
             if (allDropped.length > 0) {
                 dom.legendProf.appendChild(buildDroppedChip(allDropped));
             }
+            const unplacedHere = EVENTS.filter(e => e.prof === prof && isUnplaced(e));
+            if (unplacedHere.length > 0) {
+                dom.legendProf.appendChild(buildUnplacedChip(unplacedHere));
+            }
         }
 
         // Room view: 5 columns (Mon–Fri), blocks fill column, color by course
@@ -1716,6 +2035,9 @@
             buildDayLabels(dom.labelsRoom);
             buildTimeAxis(dom.timesRoom, dom.canvasRoom);
             buildGuides(dom.guidesRoom, DAYS.length);
+            applyGridWidth(dom.canvasRoom, DAYS.length * Math.max(1, ...DAYS.map(d =>
+                Math.min(TRACKS_DAY, Math.max(1, peakOverlap(
+                    EVENTS.filter(e => e.room === room && e.day === d)))))));
 
             if (room === '__ALL__') {
                 dom.legendRoom.textContent = "Select a room to view Monday–Friday.";
@@ -1758,6 +2080,7 @@
                     positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
+                    block.dataset.unplaced = String(isUnplaced(ev));
                     block.style.setProperty('--stripe', getCourseColor(ev.course));
 
                     const titleRow = document.createElement('div');
@@ -1786,6 +2109,10 @@
             }
             if (allDropped.length > 0) {
                 dom.legendRoom.appendChild(buildDroppedChip(allDropped));
+            }
+            const unplacedHere = EVENTS.filter(e => e.room === room && isUnplaced(e));
+            if (unplacedHere.length > 0) {
+                dom.legendRoom.appendChild(buildUnplacedChip(unplacedHere));
             }
         }
 
@@ -1844,6 +2171,7 @@
                     positionInDayColumn(block, i, ev._track, trackCount, colW);
 
                     block.dataset.lab = String(ev.isLab);
+                    block.dataset.unplaced = String(isUnplaced(ev));
                     block.style.setProperty('--stripe', getProfColor(ev.prof));
 
                     const sectionKey = getSectionKey(ev);
@@ -1884,6 +2212,160 @@
         }
 
 
+        /* ---------- Course View (item 11) ---------- */
+        // EVENTS holds one entry per (section, weekday). The table wants one row
+        // per meeting block, so entries that share a section id and lecture/lab
+        // type are folded back into a single row with their days recombined.
+        let courseSort = { key: 'course', dir: 'asc' };
+
+        function courseRows() {
+            const byBlock = new Map();
+            EVENTS.forEach(e => {
+                // `id` is the canonical section id ("COMP1050-1", "COMP1050-1-LAB").
+                // `course` is a display label that drops the "-1" for single-section
+                // courses, so it cannot be split reliably — parse the id instead.
+                const id = String(e.id || e.course || '');
+                const m = id.match(/^(.*?)-(\d+)(?:-LAB)?$/i);
+                if (!byBlock.has(id)) {
+                    byBlock.set(id, {
+                        course: m ? m[1] : id,
+                        section: m ? m[2] : '',
+                        type: e.isLab ? 'Lab' : 'LEC',
+                        isLab: !!e.isLab,
+                        days: [],
+                        start: e.start,
+                        end: e.end,
+                        prof: e.prof || 'TBA',
+                        room: e.room || '',
+                        unplaced: isUnplaced(e),
+                    });
+                }
+                byBlock.get(id).days.push(e.day);
+            });
+
+            const rows = [...byBlock.values()].map(r => ({
+                ...r,
+                days: DAYS.filter(d => r.days.includes(d)).join(''),
+            }));
+
+            const q = (controls.courseSearch.value || '').trim().toLowerCase();
+            const filtered = q
+                ? rows.filter(r => [r.course, r.section, r.prof, r.room, r.days]
+                    .join(' ').toLowerCase().includes(q))
+                : rows;
+
+            const { key, dir } = courseSort;
+            const sign = dir === 'desc' ? -1 : 1;
+            return filtered.sort((a, b) => {
+                const av = String(a[key] ?? ''), bv = String(b[key] ?? '');
+                const cmp = av.localeCompare(bv, undefined, { numeric: true });
+                return cmp !== 0 ? cmp * sign
+                    : String(a.course).localeCompare(String(b.course), undefined, { numeric: true });
+            });
+        }
+
+        function renderCourse() {
+            const body = document.getElementById('courseTableBody');
+            const empty = document.getElementById('courseEmpty');
+            if (!body) return;
+
+            const rows = courseRows();
+            body.innerHTML = '';
+            empty.hidden = rows.length > 0;
+
+            rows.forEach(r => {
+                const tr = document.createElement('tr');
+                const tba = !r.prof || r.prof === 'TBA';
+                tr.innerHTML =
+                    `<td class="course-num"></td>` +
+                    `<td></td>` +
+                    `<td><span class="course-type ${r.isLab ? 'lab' : 'lec'}"></span></td>` +
+                    `<td></td>` +
+                    `<td></td>` +
+                    `<td class="${tba ? 'course-tba' : ''}"></td>` +
+                    `<td class="${r.unplaced ? 'course-unplaced' : ''}"></td>`;
+                const cells = tr.children;
+                cells[0].textContent = r.course;
+                cells[1].textContent = r.section;
+                cells[2].firstChild.textContent = r.type;
+                cells[3].textContent = r.days;
+                cells[4].textContent = `${r.start}–${r.end}`;
+                cells[5].textContent = r.prof;
+                cells[6].textContent = r.unplaced ? 'UNPLACED ⚠' : r.room;
+                body.appendChild(tr);
+            });
+
+            document.querySelectorAll('#courseTable thead th').forEach(th => {
+                if (th.dataset.sort === courseSort.key) th.dataset.dir = courseSort.dir;
+                else delete th.dataset.dir;
+            });
+
+            const legend = document.getElementById('legend-course');
+            if (legend) {
+                const tbaCount = rows.filter(r => !r.prof || r.prof === 'TBA').length;
+                const unplacedCount = rows.filter(r => r.unplaced).length;
+                const parts = [`${rows.length} meeting blocks`];
+                if (tbaCount) parts.push(`${tbaCount} unassigned (TBA)`);
+                if (unplacedCount) parts.push(`${unplacedCount} unplaced ⚠`);
+                legend.textContent = parts.join(' — ');
+                legend.className = unplacedCount ? 'legend course-unplaced' : 'legend';
+            }
+        }
+
+        document.querySelectorAll('#courseTable thead th').forEach(th => {
+            th.addEventListener('click', () => {
+                const key = th.dataset.sort;
+                if (!key) return;
+                courseSort = {
+                    key,
+                    dir: (courseSort.key === key && courseSort.dir === 'asc') ? 'desc' : 'asc',
+                };
+                renderCourse();
+            });
+        });
+
+        /* ---------- inline status messages ---------- */
+        let toastTimer = null;
+        function showToast(msg, kind) {
+            const el = document.getElementById('toast');
+            if (!el) return;
+            el.textContent = msg;
+            el.className = `toast ${kind || 'ok'}`;
+            el.hidden = false;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { el.hidden = true; }, kind === 'err' ? 9000 : 4000);
+        }
+
+        /* ---------- CSV download (item 9) ---------- */
+        // Served with Content-Disposition: attachment, so the browser opens its
+        // own save dialog (or drops it in Downloads, per the user's setting).
+        async function downloadScheduleCsv(format) {
+            const btn = document.getElementById('downloadBtn');
+            const original = btn ? btn.textContent : '';
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = '…'; }
+                const res = await fetch(`/api/schedule/csv?format=${encodeURIComponent(format)}`);
+                if (!res.ok) {
+                    let detail = `HTTP ${res.status}`;
+                    try { detail = (await res.json()).detail || detail; } catch (e) { /* not JSON */ }
+                    throw new Error(detail);
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = format === 'banner' ? 'schedule.csv' : 'schedule_simple.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (err) {
+                showToast(`Could not download the schedule CSV — ${err.message}`, 'err');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = original; }
+            }
+        }
+
         /* ---------- view switching ---------- */
         function setView(which) {
             currentView = which;
@@ -1897,16 +2379,19 @@
             if (which === 'day') viewTitleEl.textContent = 'Day Schedule';
             if (which === 'prof') viewTitleEl.textContent = 'Professor View';
             if (which === 'room') viewTitleEl.textContent = 'Room View';
+            if (which === 'course') viewTitleEl.textContent = 'Course View';
             // if (which === 'section') viewTitleEl.textContent = 'Section View';
 
             controls.daySelect.style.display = (which === 'day') ? '' : 'none';
             controls.profSelect.style.display = (which === 'prof') ? '' : 'none';
             controls.roomSelect.style.display = (which === 'room') ? '' : 'none';
             controls.courseSelect.style.display = (which === 'section') ? '' : 'none';
+            controls.courseSearch.style.display = (which === 'course') ? '' : 'none';
 
             if (which === 'day') renderDay();
             else if (which === 'prof') renderProf();
             else if (which === 'room') renderRoom();
+            else if (which === 'course') renderCourse();
             else renderSection();
         }
 
@@ -1927,6 +2412,10 @@
                 if (!name || controls.roomSelect.value === '__ALL__') return 'Room weekly schedule';
                 return `${name} weekly schedule`;
             }
+            if (currentView === 'course') {
+                const q = (controls.courseSearch.value || '').trim();
+                return q ? `Course schedule — "${q}"` : 'Course schedule';
+            }
             if (currentView === 'section') {
                 const opt = controls.courseSelect.options[controls.courseSelect.selectedIndex];
                 const name = opt ? opt.textContent : '';
@@ -1945,6 +2434,7 @@
         controls.profSelect.addEventListener('change', renderProf);
         controls.roomSelect.addEventListener('change', renderRoom);
         controls.courseSelect.addEventListener('change', renderSection);
+        controls.courseSearch.addEventListener('input', renderCourse);
 
         window.addEventListener('resize', () => {
             renderDay();
@@ -1953,14 +2443,33 @@
             renderSection();
         });
 
+        const downloadBtn = document.getElementById('downloadBtn');
+        if (downloadBtn) {
+            // Shift-click grabs the wide Banner-style sheet instead of the compact one.
+            downloadBtn.addEventListener('click', (e) => {
+                downloadScheduleCsv(e.shiftKey ? 'banner' : 'simple');
+            });
+        }
+
         /* ---------- init ---------- */
         function populateSelectors() {
-            const profs = [...new Set(EVENTS.map(e => e.prof))].filter(Boolean).sort();
+            const scheduled = new Set(EVENTS.map(e => e.prof).filter(Boolean));
+            // Roster ∪ scheduled: the roster catches professors with no sections,
+            // the schedule catches names that appear in the output but not in
+            // faculty_load.csv (usually a spelling mismatch between the two files).
+            const profs = [...new Set([...FACULTY_ROSTER, ...scheduled])].sort();
             controls.profSelect.innerHTML = `<option value="__ALL__">Select Professor…</option>`;
             profs.forEach(p => {
                 const o = document.createElement('option');
                 o.value = p;
-                o.textContent = p;
+                const has = scheduled.has(p);
+                o.textContent = has ? p : `${p} (no sections)`;
+                if (!has) {
+                    o.dataset.empty = 'true';
+                    o.title = `${p} has a teaching load but was assigned no sections. ` +
+                        `Usually their preferred courses went to someone else, or their ` +
+                        `name is spelled differently in prof_preferences.csv.`;
+                }
                 controls.profSelect.appendChild(o);
             });
 
@@ -2054,6 +2563,7 @@
             // init the scheduler once
             populateSelectors();
             initBoards();
+            renderCourse();
             setView('day');
         }
 
@@ -2104,6 +2614,9 @@
 
         /* ── Auto-load schedule from server on startup ── */
         (async function () {
+            // TRACKS_DAY must be known before the first render — the boards size
+            // their columns from it.
+            await Promise.all([loadTracksSetting(), loadFacultyRoster()]);
             try {
                 const res = await fetch('/api/schedule');
                 if (res.ok) {

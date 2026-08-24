@@ -43,6 +43,8 @@ FILE_MAP: Dict[str, str] = {
     "rooms":              "rooms.csv",
     "room_preferences":   "room_preferences.csv",
     "non_overlap_groups": "non_overlap_groups.csv",
+    "settings":           "settings.csv",
+    "meeting_patterns":   "meeting_patterns.csv",
 }
 
 # ── Scheduler state ───────────────────────────────────────────────────────────
@@ -159,19 +161,52 @@ def _read_headers(path: Path) -> List[str]:
 
 
 def _write_csv(path: Path, rows: List[Dict[str, Any]], headers: List[str]) -> None:
-    fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
+    """Write rows to `path` atomically.
+
+    Raises HTTPException(500) with a human-readable reason on failure. Silent
+    failure here is the worst outcome: the user edits a table, sees no error,
+    and the scheduler keeps reading the old file. The common causes on Windows
+    are the CSV being open in Excel (PermissionError) and OneDrive holding a
+    lock on the folder, so those get their own message.
+    """
+    try:
+        fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
+    except OSError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Could not save {path.name}: no temporary file could be created "
+                    f"in {DATA_DIR}. Check the folder exists and is writable. ({e})"),
+        )
     try:
         with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
             w.writeheader()
             w.writerows(rows)
         os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    except PermissionError as e:
+        _discard(tmp)
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Could not save {path.name} — the file is locked. "
+                    f"It is usually open in Excel; close it and try again. ({e})"),
+        )
+    except OSError as e:
+        _discard(tmp)
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Could not save {path.name}: {e}. If this folder is synced "
+                    f"by OneDrive, pause syncing and try again."),
+        )
+    except Exception as e:
+        _discard(tmp)
+        raise HTTPException(status_code=500, detail=f"Could not save {path.name}: {e}")
+
+
+def _discard(tmp: str) -> None:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
 
 
 # ── Data endpoints ────────────────────────────────────────────────────────────
@@ -192,7 +227,22 @@ def put_data(slug: str, rows: List[Dict[str, Any]]):
     if not rows:
         raise HTTPException(status_code=422, detail="Cannot save an empty table")
     _write_csv(path, rows, list(rows[0].keys()))
-    return {"ok": True, "rows": len(rows)}
+    # Read back what actually landed on disk. A write that reports success but
+    # produces a different row count means something else is touching the file.
+    try:
+        written = len(_read_csv(path))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Saved {path.name} but could not read it back to verify: {e}",
+        )
+    if written != len(rows):
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Saved {path.name} but it now holds {written} rows instead of "
+                    f"{len(rows)}. Another program may be writing to this file."),
+        )
+    return {"ok": True, "rows": written, "path": str(path)}
 
 
 @app.post("/api/data/{slug}/upload")
@@ -282,7 +332,36 @@ def get_schedule():
 
 
 @app.get("/api/schedule/csv")
-def get_schedule_csv():
+def get_schedule_csv(format: str = "simple"):
+    """Download the schedule as CSV.
+
+    format=simple (default) → Course/Type/Days/Times/Faculty, the compact layout
+    format=banner           → the wide Banner-style import sheet
+    Served as an attachment so the browser opens its save dialog rather than
+    rendering the CSV in the tab.
+    """
+    if format not in ("simple", "banner"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown format '{format}'. Use 'simple' or 'banner'.",
+        )
+    filename = "schedule_simple.csv" if format == "simple" else "schedule.csv"
+    path = BASE_DIR / filename
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No schedule has been generated yet. Run the scheduler first.",
+        )
+    return FileResponse(
+        str(path),
+        media_type="text/csv",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/schedule/csv/legacy")
+def get_schedule_csv_legacy():
     path = BASE_DIR / "schedule.csv"
     if not path.exists():
         raise HTTPException(status_code=404, detail="No schedule CSV yet")

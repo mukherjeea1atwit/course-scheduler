@@ -28,6 +28,24 @@ Installing (and re-installing / updating):
   the end. The fresh install starts from the default input files, so if
   you had edited yours, copy them back from that folder.
 
+  IMPORTANT - do not copy back all of them. Copy back only the files
+  holding your own data:
+     course-list-*.csv, prof_preferences.csv, faculty_load.csv,
+     rooms.csv, room_preferences.csv, non_overlap_groups.csv
+
+  Leave the NEW versions of these in place:
+     timings.csv           new versions add class times the scheduler
+                           needs; an old copy removes them
+     meeting_patterns.csv  how long a class is for a given number of
+                           days per week
+     settings.csv          tunables, e.g. parallel classes
+
+  If you had edited timings.csv yourself, re-apply your changes to the
+  new file instead of replacing it.
+
+  If sections come out marked UNPLACED right after an update, an old
+  timings.csv is the first thing to check.
+
 Running the scheduler:
   - Double-click the "WIT Class Scheduler" shortcut on your Desktop
     (or run.bat in this folder).

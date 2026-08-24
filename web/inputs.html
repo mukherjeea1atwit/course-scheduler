@@ -87,6 +87,8 @@ const FILES = [
   { slug: 'rooms',              label: 'Rooms'               },
   { slug: 'room_preferences',   label: 'Room Preferences'   },
   { slug: 'non_overlap_groups', label: 'Non-Overlap Groups' },
+  { slug: 'meeting_patterns',   label: 'Meeting Lengths'     },
+  { slug: 'settings',           label: 'Settings'            },
 ];
 
 let activeSlug   = FILES[0].slug;
@@ -256,12 +258,30 @@ async function saveData() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(tableData),
     });
-    if (!res.ok) throw new Error(await res.text());
+
+    // The server returns {detail: "..."} on failure. Surface that sentence
+    // rather than the raw JSON — the common causes (file open in Excel,
+    // OneDrive lock) are things the user can actually act on.
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        detail = body.detail || detail;
+      } catch (_) {
+        try { detail = (await res.text()) || detail; } catch (_) { /* keep status */ }
+      }
+      throw new Error(detail);
+    }
+
+    // The server re-reads the file after writing and reports the row count that
+    // actually landed on disk, so a save that silently did nothing is caught.
+    const body = await res.json();
     dirty = false;
-    setStatus('✓ Saved', 'saved');
-    setTimeout(() => setStatus(''), 3000);
+    setStatus(`✓ Saved ${body.rows} row${body.rows === 1 ? '' : 's'} to disk`, 'saved');
+    setTimeout(() => setStatus(''), 4000);
   } catch (e) {
-    setStatus(`Save failed: ${e.message}`, 'error');
+    setStatus(`Save failed — ${e.message}`, 'error');
+    console.error('[scheduler] save failed', e);
   }
 }
 
