@@ -59,14 +59,15 @@
 
 <div class="page-head">
   <h1>Input Editor</h1>
-  <p>Edit scheduling input files. Changes are saved directly to the data CSV files used by the scheduler.</p>
+  <p>Edit scheduling input files. Each tab keeps its own edits — switch freely, then Save writes every changed file at once. A • on a tab means it has unsaved changes.</p>
 </div>
 
 <div class="tabs" id="tabBar"></div>
 
 <div class="toolbar">
   <button class="btn" onclick="addRow()">+ Add Row</button>
-  <button class="btn btn-save" onclick="saveData()">💾 Save</button>
+  <button class="btn btn-save" onclick="saveData()"
+          title="Saves every tab with unsaved changes (marked with •), each to its own file.">💾 Save</button>
   <label class="upload-label" title="Pick any CSV or Excel file from your computer — it replaces this tab's data file. The file it replaces is kept, not deleted (saved as .old1, .old2, ...).">
     📂 Upload CSV / Excel <input type="file" accept=".csv,.xlsx,.xls,text/csv" onchange="uploadCSV(this)">
   </label>
@@ -91,12 +92,36 @@ const FILES = [
   { slug: 'settings',           label: 'Settings'            },
 ];
 
-let activeSlug   = FILES[0].slug;
-let tableData    = [];   // array of plain objects
-let tableHeaders = [];   // column key order
-let dirty        = false;
+const LABELS = Object.fromEntries(FILES.map(f => [f.slug, f.label]));
 
-/* ── Build tab bar ─────────────────────────────────────────────────────── */
+/* ── Per-file state ─────────────────────────────────────────────────────────
+ * One buffer PER SLUG, never a single shared table.
+ *
+ * The old code kept one global tableData/tableHeaders/dirty triple for all nine
+ * tabs. That is what destroyed the customer's settings.csv: switching to a tab
+ * whose load failed left the PREVIOUS tab's rows sitting in tableData while
+ * activeSlug had already moved on, so Save happily PUT the course list to
+ * /api/data/settings. With a buffer per slug there is no shared variable left
+ * to leak from one file into another — every read and write in this file is
+ * addressed by slug, and rows only ever travel to the endpoint of the slug
+ * whose buffer they came from.
+ *
+ *   rows    — array of plain objects, this file's edit buffer
+ *   headers — column key order for this file
+ *   dirty   — has unsaved edits
+ *   loaded  — a GET succeeded; ONLY a loaded tab may be saved
+ *   error   — the server's message if the load failed, else null
+ */
+const state = {};
+FILES.forEach(({ slug }) => {
+  state[slug] = { rows: [], headers: [], dirty: false, loaded: false, error: null };
+});
+
+let activeSlug = FILES[0].slug;
+
+const cur = () => state[activeSlug];
+
+/* ── Build tab bar ─────────────────────────────────────────────────────────── */
 const tabBar = document.getElementById('tabBar');
 FILES.forEach(({ slug, label }) => {
   const btn = document.createElement('button');
@@ -107,47 +132,115 @@ FILES.forEach(({ slug, label }) => {
   tabBar.appendChild(btn);
 });
 
-/* ── Tab switching ─────────────────────────────────────────────────────── */
-async function switchTab(slug) {
-  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
-  activeSlug = slug;
-  dirty = false;
-  document.querySelectorAll('.tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.slug === slug));
-  setStatus('');
-  await loadData();
+/* Mark every tab that is holding unsaved edits. Save writes ALL dirty files at
+ * once, so the user has to be able to see which files that is before clicking
+ * it — otherwise a save touching four files is a surprise. */
+function renderTabs() {
+  document.querySelectorAll('.tab').forEach(t => {
+    const slug = t.dataset.slug;
+    const st = state[slug];
+    t.classList.toggle('active', slug === activeSlug);
+    t.textContent = (st && st.dirty ? '• ' : '') + LABELS[slug];
+    t.title = st && st.dirty ? 'Unsaved changes — Save writes this file too' : '';
+  });
 }
 
-/* ── Load ──────────────────────────────────────────────────────────────── */
-async function loadData() {
-  const wrap = document.getElementById('tableWrap');
-  wrap.innerHTML = '<p class="empty-msg">Loading…</p>';
-  try {
-    const res = await fetch(`/api/data/${activeSlug}`);
-    if (!res.ok) throw new Error(await res.text());
-    const rows = await res.json();
-    tableData = rows;
-
-    if (rows.length > 0) {
-      tableHeaders = Object.keys(rows[0]);
-    } else {
-      // File is empty — fetch headers so we can show the template table
-      const hRes = await fetch(`/api/data/${activeSlug}/headers`);
-      tableHeaders = hRes.ok ? await hRes.json() : [];
-    }
-
+/* ── Tab switching ─────────────────────────────────────────────────────────── */
+async function switchTab(slug) {
+  // No "discard your changes?" prompt any more: each tab keeps its own buffer,
+  // so switching away no longer throws work out and there is nothing to warn
+  // about. Unsaved work is guarded on page exit instead (see beforeunload).
+  activeSlug = slug;
+  renderTabs();
+  setStatus('');
+  // Only fetch a file we have not successfully loaded yet. Re-fetching would
+  // silently overwrite edits the user made on this tab before switching away.
+  if (!state[slug].loaded) {
+    await loadData(slug);
+  } else {
     renderTable();
-  } catch (e) {
-    wrap.innerHTML = `<p class="empty-msg" style="color:#dc2626">Error: ${e.message}</p>`;
+    if (state[slug].dirty) setStatus('Unsaved changes');
   }
 }
 
-/* ── Render ────────────────────────────────────────────────────────────── */
-function renderTable() {
-  const wrap = document.getElementById('tableWrap');
-  const dlBtn = document.getElementById('dlTemplateBtn');
+/* ── Load ──────────────────────────────────────────────────────────────────── */
+async function loadData(slug) {
+  const st = state[slug];
+  if (slug === activeSlug) {
+    document.getElementById('tableWrap').innerHTML = '<p class="empty-msg">Loading…</p>';
+  }
+  try {
+    const res = await fetch(`/api/data/${slug}`);
+    if (!res.ok) throw new Error(await readError(res));
+    const rows = await res.json();
 
-  if (!tableHeaders.length) {
+    let headers;
+    if (rows.length > 0) {
+      // Union across rows, not Object.keys(rows[0]): a file whose first row has
+      // a trailing empty column would otherwise render (and later save) fewer
+      // columns than the file actually has.
+      const seen = new Set();
+      headers = [];
+      rows.forEach(r => Object.keys(r).forEach(k => {
+        if (k && !seen.has(k)) { seen.add(k); headers.push(k); }
+      }));
+    } else {
+      // File is empty — fetch headers so we can show the template table
+      const hRes = await fetch(`/api/data/${slug}/headers`);
+      headers = hRes.ok ? await hRes.json() : [];
+    }
+
+    st.rows    = rows;
+    st.headers = headers;
+    st.loaded  = true;
+    st.error   = null;
+    st.dirty   = false;
+  } catch (e) {
+    // A failed load MUST leave this tab completely empty and not loaded.
+    // Anything else and the editor is showing/holding data that does not belong
+    // to this file — which is exactly how the customer's settings.csv got the
+    // course list written into it. `loaded: false` is what makes saveData()
+    // skip this tab entirely; it is not savable at all until a GET succeeds.
+    st.rows    = [];
+    st.headers = [];
+    st.loaded  = false;
+    st.dirty   = false;
+    st.error   = e.message || String(e);
+  }
+  if (slug === activeSlug) {
+    renderTable();
+    renderTabs();
+  }
+}
+
+/* Pull the server's `detail` sentence out of an error response. The API sends
+ * actionable messages ("Settings is missing from your data folder — ...",
+ * "Did you pick the wrong tab?"); showing raw JSON instead wastes them. */
+async function readError(res) {
+  let detail = `HTTP ${res.status}`;
+  try {
+    const body = await res.json();
+    detail = body.detail || detail;
+  } catch (_) {
+    try { detail = (await res.text()) || detail; } catch (_) { /* keep status */ }
+  }
+  return detail;
+}
+
+/* ── Render ────────────────────────────────────────────────────────────────── */
+function renderTable() {
+  const wrap  = document.getElementById('tableWrap');
+  const dlBtn = document.getElementById('dlTemplateBtn');
+  const st    = cur();
+
+  if (st.error) {
+    wrap.innerHTML =
+      `<p class="empty-msg" style="color:#dc2626">Could not load ${LABELS[activeSlug]}: ${st.error}</p>`;
+    dlBtn.style.display = 'none';
+    return;
+  }
+
+  if (!st.headers.length) {
     wrap.innerHTML = '<p class="empty-msg">No data found.</p>';
     dlBtn.style.display = 'none';
     return;
@@ -157,12 +250,12 @@ function renderTable() {
   dlBtn.style.display = '';
 
   // Show a hint row when the table is empty
-  if (tableData.length === 0) {
+  if (st.rows.length === 0) {
     wrap.innerHTML = '';
     const tbl = document.createElement('table');
     const thead = tbl.createTHead();
     const hr = thead.insertRow();
-    tableHeaders.forEach(h => {
+    st.headers.forEach(h => {
       const th = document.createElement('th');
       th.textContent = h;
       hr.appendChild(th);
@@ -173,7 +266,7 @@ function renderTable() {
     const tbody = tbl.createTBody();
     const hint = tbody.insertRow();
     const td = hint.insertCell();
-    td.colSpan = tableHeaders.length + 1;
+    td.colSpan = st.headers.length + 1;
     td.style.cssText = 'text-align:center;padding:18px;color:#9ca3af;font-style:italic;background:#fafafa';
     td.textContent = 'No rows yet — click "+ Add Row" or upload a file to get started.';
     wrap.appendChild(tbl);
@@ -184,7 +277,7 @@ function renderTable() {
   // Header row
   const thead = tbl.createTHead();
   const hr = thead.insertRow();
-  tableHeaders.forEach(h => {
+  st.headers.forEach(h => {
     const th = document.createElement('th');
     th.textContent = h;
     hr.appendChild(th);
@@ -195,25 +288,28 @@ function renderTable() {
 
   // Data rows
   const tbody = tbl.createTBody();
-  tableData.forEach((row, ri) => tbody.appendChild(makeRow(row, ri)));
+  st.rows.forEach((row, ri) => tbody.appendChild(makeRow(activeSlug, row, ri)));
 
   wrap.innerHTML = '';
   wrap.appendChild(tbl);
 }
 
-function makeRow(row, ri) {
+/* The slug is baked into every input's change handler. A row rendered for
+ * `courses` writes into state.courses even if the user has since switched tabs
+ * and a stale event fires — it can never land in another file's buffer. */
+function makeRow(slug, row, ri) {
+  const st = state[slug];
   const tr = document.createElement('tr');
   tr.dataset.ri = ri;
-  tableHeaders.forEach(h => {
+  st.headers.forEach(h => {
     const td = tr.insertCell();
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.value = row[h] || '';
     inp.setAttribute('data-key', h);
     inp.addEventListener('input', () => {
-      tableData[ri][h] = inp.value;
-      dirty = true;
-      setStatus('Unsaved changes');
+      st.rows[ri][h] = inp.value;
+      markDirty(slug);
     });
     td.appendChild(inp);
   });
@@ -223,94 +319,140 @@ function makeRow(row, ri) {
   delBtn.className = 'del-btn';
   delBtn.title = 'Delete row';
   delBtn.textContent = '✕';
-  delBtn.onclick = () => deleteRow(ri);
+  delBtn.onclick = () => deleteRow(slug, ri);
   delTd.appendChild(delBtn);
   return tr;
 }
 
-/* ── Add / delete ──────────────────────────────────────────────────────── */
+function markDirty(slug) {
+  state[slug].dirty = true;
+  renderTabs();
+  const n = dirtySlugs().length;
+  setStatus(n > 1 ? `Unsaved changes in ${n} files` : 'Unsaved changes');
+}
+
+/* The one place that decides what Save touches: loaded AND dirty. A tab whose
+ * load failed is `loaded: false` and can therefore never be in this list. */
+function dirtySlugs() {
+  return FILES.map(f => f.slug).filter(s => state[s].loaded && state[s].dirty);
+}
+
+/* ── Add / delete ──────────────────────────────────────────────────────────── */
 function addRow() {
-  const empty = Object.fromEntries(tableHeaders.map(h => [h, '']));
-  tableData.push(empty);
-  dirty = true;
-  const ri = tableData.length - 1;
+  const slug = activeSlug;
+  const st = state[slug];
+  if (!st.loaded) {
+    setStatus(`Cannot edit ${LABELS[slug]} — it failed to load. Fix the file, then reload the page.`, 'error');
+    return;
+  }
+  const empty = Object.fromEntries(st.headers.map(h => [h, '']));
+  st.rows.push(empty);
+  const ri = st.rows.length - 1;
   const tbody = document.querySelector('table tbody');
-  if (tbody) tbody.appendChild(makeRow(empty, ri));
+  if (tbody) tbody.appendChild(makeRow(slug, empty, ri));
   // Scroll to new row
   const wrap = document.getElementById('tableWrap');
   wrap.scrollTop = wrap.scrollHeight;
-  setStatus('Unsaved changes');
+  markDirty(slug);
 }
 
-function deleteRow(ri) {
-  tableData.splice(ri, 1);
-  dirty = true;
-  renderTable();
-  setStatus('Unsaved changes');
+function deleteRow(slug, ri) {
+  state[slug].rows.splice(ri, 1);
+  markDirty(slug);
+  if (slug === activeSlug) renderTable();
 }
 
-/* ── Save ──────────────────────────────────────────────────────────────── */
+/* ── Save ──────────────────────────────────────────────────────────────────── */
+/* Saves EVERY dirty file, each to its own endpoint, in one click.
+ *
+ * The loop is the whole point: `slug` comes from the buffer being sent, so
+ * state[slug].rows can only ever be PUT to /api/data/<that same slug>. There is
+ * no path through this function that reads one tab's rows and writes another
+ * tab's URL, and a tab that failed to load is excluded by dirtySlugs(). */
 async function saveData() {
-  setStatus('Saving…');
-  try {
-    const res = await fetch(`/api/data/${activeSlug}`, {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(tableData),
-    });
+  const slugs = dirtySlugs();
+  if (!slugs.length) {
+    setStatus('Nothing to save — no unsaved changes.');
+    setTimeout(() => setStatus(''), 3000);
+    return;
+  }
 
-    // The server returns {detail: "..."} on failure. Surface that sentence
-    // rather than the raw JSON — the common causes (file open in Excel,
-    // OneDrive lock) are things the user can actually act on.
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      try {
-        const body = await res.json();
-        detail = body.detail || detail;
-      } catch (_) {
-        try { detail = (await res.text()) || detail; } catch (_) { /* keep status */ }
-      }
-      throw new Error(detail);
+  setStatus(slugs.length === 1 ? 'Saving…' : `Saving ${slugs.length} files…`);
+  const saved  = [];
+  const failed = [];
+
+  for (const slug of slugs) {
+    try {
+      const res = await fetch(`/api/data/${slug}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(state[slug].rows),
+      });
+      // The server returns {detail: "..."} on failure. Surface that sentence
+      // rather than the raw JSON — the common causes (wrong columns, file open
+      // in Excel, OneDrive lock) are things the user can actually act on.
+      if (!res.ok) throw new Error(await readError(res));
+      // The server re-reads the file after writing and reports the row count
+      // that actually landed on disk, so a save that silently did nothing is
+      // caught here.
+      const body = await res.json();
+      state[slug].dirty = false;
+      saved.push(`${LABELS[slug]} (${body.rows})`);
+    } catch (e) {
+      // One bad file must not hide the good ones. Its tab stays dirty so the
+      // user can fix it and press Save again; the files that succeeded are
+      // already on disk and are reported by name.
+      failed.push(`${LABELS[slug]}: ${e.message}`);
+      console.error(`[scheduler] save failed for ${slug}`, e);
     }
+  }
 
-    // The server re-reads the file after writing and reports the row count that
-    // actually landed on disk, so a save that silently did nothing is caught.
-    const body = await res.json();
-    dirty = false;
-    setStatus(`✓ Saved ${body.rows} row${body.rows === 1 ? '' : 's'} to disk`, 'saved');
-    setTimeout(() => setStatus(''), 4000);
-  } catch (e) {
-    setStatus(`Save failed — ${e.message}`, 'error');
-    console.error('[scheduler] save failed', e);
+  renderTabs();
+
+  if (!failed.length) {
+    setStatus(`✓ Saved ${saved.length} file${saved.length === 1 ? '' : 's'}: ${saved.join(', ')}`, 'saved');
+    setTimeout(() => setStatus(''), 6000);
+  } else {
+    const ok = saved.length ? ` Saved: ${saved.join(', ')}.` : '';
+    setStatus(`Save failed — ${failed.join(' | ')}.${ok}`, 'error');
   }
 }
 
-/* ── Upload CSV ────────────────────────────────────────────────────────── */
+/* ── Upload CSV ────────────────────────────────────────────────────────────── */
 async function uploadCSV(input) {
   const file = input.files[0];
   if (!file) return;
+  // Capture the slug now: the upload is async and the user can switch tabs
+  // while it is in flight. Everything below must refer to this slug, not to
+  // activeSlug, or the file lands in whichever tab happens to be open when it
+  // finishes.
+  const slug = activeSlug;
   const fd = new FormData();
   fd.append('file', file);
   setStatus('Uploading…');
   try {
-    const res = await fetch(`/api/data/${activeSlug}/upload`, { method: 'POST', body: fd });
-    if (!res.ok) throw new Error(await res.text());
+    const res = await fetch(`/api/data/${slug}/upload`, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await readError(res));
     const j = await res.json();
-    dirty = false;
+    // The uploaded file is now the file on disk, so any buffered edits for this
+    // tab are gone by definition — drop them rather than letting them be saved
+    // back over the upload later.
+    state[slug].dirty = false;
     const backupNote = j.backup ? ` — previous file kept as ${j.backup}` : '';
-    setStatus(`✓ Uploaded (${j.rows} rows)${backupNote}`, 'saved');
-    await loadData();
+    await loadData(slug);
+    setStatus(`✓ Uploaded ${LABELS[slug]} (${j.rows} rows)${backupNote}`, 'saved');
     setTimeout(() => setStatus(''), 6000);
   } catch (e) {
-    setStatus(`Upload failed: ${e.message}`, 'error');
+    setStatus(`Upload failed for ${LABELS[slug]}: ${e.message}`, 'error');
   }
   input.value = '';
 }
 
-/* ── Download template ─────────────────────────────────────────────────── */
+/* ── Download template ─────────────────────────────────────────────────────── */
 function downloadTemplate() {
-  if (!tableHeaders.length) return;
-  const csvContent = tableHeaders.join(',') + '\n';
+  const st = cur();
+  if (!st.headers.length) return;
+  const csvContent = st.headers.join(',') + '\n';
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -321,15 +463,24 @@ function downloadTemplate() {
   URL.revokeObjectURL(a.href);
 }
 
-/* ── Status helper ─────────────────────────────────────────────────────── */
+/* ── Status helper ─────────────────────────────────────────────────────────── */
 function setStatus(msg, cls = '') {
   const el = document.getElementById('statusMsg');
   el.textContent = msg;
   el.className = 'status-msg' + (cls ? ' ' + cls : '');
 }
 
-/* ── Init ──────────────────────────────────────────────────────────────── */
-loadData();
+/* Edits now survive tab switches, so the only way to lose them is to leave the
+ * page. That is where the warning belongs. */
+window.addEventListener('beforeunload', (e) => {
+  if (dirtySlugs().length) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+/* ── Init ──────────────────────────────────────────────────────────────────── */
+loadData(activeSlug);
 </script>
 
 <script src="/web/nav.js"></script>

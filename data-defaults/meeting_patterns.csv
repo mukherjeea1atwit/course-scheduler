@@ -1,0 +1,6 @@
+subject,lecture_days_per_week,lecture_hours,meeting_minutes,lab_minutes,notes
+*,2,3,90,105,COMP/DATA 3-2-4 offering: 90 min lecture twice a week plus a 105 min lab
+*,2,4,80,0,COMP/DATA 4-0-4 offering: 80 min lecture twice a week
+MATH,2,,105,0,Math meets 105 minutes on T/Th
+*,3,,70,0,70 minute meetings across any three weekdays (MWF, MTTh, TThF, TWF...)
+*,4,,70,0,70 minute meetings across any four weekdays

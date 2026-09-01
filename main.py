@@ -214,6 +214,27 @@ def is_grad(course_number: str) -> bool:
     return bool(m and int(m.group(1)) >= 5000)
 
 
+# Scheduling tiers, most-constrained first. Upper-level undergraduate courses
+# (3000/4000) are the scarcest: they typically have one or two qualified
+# professors and no substitutes, so they must claim faculty load and slots
+# before anything else. Graduate courses come next — they all compete for the
+# single 18:00 evening slot. Lower-level undergraduate courses (1000/2000) go
+# last: they have the largest faculty pools and the most sections, so they are
+# the easiest to place around whatever is already fixed.
+LEVEL_UPPER_UG, LEVEL_GRAD, LEVEL_LOWER_UG = 0, 1, 2
+
+
+def course_level_tier(course_number: str) -> int:
+    """Scheduling tier for a course number — see LEVEL_* above."""
+    m = re.search(r"(\d+)", course_number or "")
+    num = int(m.group(1)) if m else 0
+    if num >= 5000:
+        return LEVEL_GRAD
+    if num >= 3000:
+        return LEVEL_UPPER_UG
+    return LEVEL_LOWER_UG
+
+
 def per_meeting_min(total_min: int, num_days: int) -> int:
     return (total_min + num_days - 1) // num_days
 
@@ -693,21 +714,54 @@ class RoomAssigner:
         needed_type = "lab" if is_lab else "lecture"
         key = (normalize(sec.course_number), needed_type)
 
+        # The Type column of rooms.csv ("Lab", "Lecture" or "Both") was loaded and
+        # then never consulted by any placement decision — a room marked
+        # lecture-only could still be handed a lab. It is invisible while every
+        # room is "Both", but it silently breaks the moment a room is restricted.
+        def type_ok(room: Room) -> bool:
+            t = (room.type or "").strip().lower()
+            if not t or t == "both":
+                return True
+            return t == needed_type
+
+        # The course list's own "Preferred Room" column was parsed into
+        # Section.preferred_room and never used either, so filling it in had no
+        # effect. It is the most specific statement of intent available, so it is
+        # tried ahead of the ranked room_preferences.csv entries.
+        #
+        # Lectures only. The course list has a single "Preferred Room" cell per
+        # course, which reads as the room the class meets in; room_preferences.csv
+        # is the file that distinguishes a course's lecture room from its lab room
+        # (it has a Type column), so honouring one unlabelled value for the lab too
+        # would silently override a properly chosen lab room.
+        if sec.preferred_room and not is_lab:
+            want = (sec.preferred_room or "").strip()
+            for room in self.rooms:
+                if (room.name == want and type_ok(room) and room.capacity >= needed_capacity
+                        and self.is_free(room.name, days, start, end)):
+                    return room.name
+
         for pref in self.room_prefs.get(key, []):
             cap = pref.max_cap or needed_capacity
             for room in self.rooms:
-                if room.name == pref.location and room.capacity >= cap and self.is_free(room.name, days, start, end):
+                if (room.name == pref.location and type_ok(room) and room.capacity >= cap
+                        and self.is_free(room.name, days, start, end)):
                     return room.name
 
         free_candidates = sorted(
-            (r for r in self.rooms if r.capacity >= needed_capacity and self.is_free(r.name, days, start, end)),
+            (r for r in self.rooms
+             if type_ok(r) and r.capacity >= needed_capacity and self.is_free(r.name, days, start, end)),
             key=lambda r: r.capacity,
         )
         if free_candidates:
             return free_candidates[0].name
 
-        if self.rooms:
-            worst = min(self.rooms, key=lambda r: r.capacity)
+        # Last resort: overbook, but never on the wrong room type — a lecture in
+        # an undersized room is a seating problem, a lab in a room with no lab
+        # equipment is not a class at all.
+        typed = [r for r in self.rooms if type_ok(r)]
+        if typed:
+            worst = min(typed, key=lambda r: r.capacity)
             print(
                 f"[ROOM-OVERBOOK] {sec.id} on {days} "
                 f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')} → {worst.name}"
@@ -747,6 +801,9 @@ class TimeSlotScheduler:
         self.slots = sorted(timeslots, key=lambda t: (t.start.hour, t.start.minute))
         self._faculty_busy: Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
         self._slot_load: Dict[str, Dict[str, int]] = {d: {} for d in ALL_DAYS}
+        # Forced/UNPLACED sections, kept apart from the real ledger below — see
+        # book_placeholder() for why they must spread but must not consume the cap.
+        self._placeholder_intervals: Dict[str, Dict[Tuple[int, int], int]] = {d: {} for d in ALL_DAYS}
         # Booked (start, end) pairs per day with a count each. Used for C11 so the
         # guard counts true time overlaps (e.g. a 17:15-18:45 lecture overlapping
         # an 18:00 grad session), exactly as the constraint validator does.
@@ -794,6 +851,44 @@ class TimeSlotScheduler:
         self._block_faculty(faculty, days, slot.start, slot.stop)
         self._increment_load(days, slot)
 
+    def book_placeholder(self, days: List[str], slot: TimeSlot) -> None:
+        """Record a forced (UNPLACED) section on a separate ledger.
+
+        Placeholders need to spread across day patterns like real sections — 60
+        unplaceable sections all landing on Monday is useless to the person who
+        has to fix them by hand. But they must NOT consume the real
+        max_concurrent_sections budget: a placeholder is a class the scheduler
+        already declared it could not schedule, so letting it occupy one of the
+        10 tracks would push a class that CAN be scheduled out of the timetable,
+        and would make the C11 check report a number that counts classes that do
+        not exist. Two ledgers keep both properties.
+        """
+        s, e = t2m(slot.start), t2m(slot.stop)
+        for d in days:
+            self._placeholder_intervals[d][(s, e)] = \
+                self._placeholder_intervals[d].get((s, e), 0) + 1
+
+    def placeholder_capacity_ok(self, days: List[str], slot: TimeSlot) -> bool:
+        """Capacity test for the forced path: real sections plus placeholders
+        already parked here. Used only to spread placeholders, never to admit
+        or reject a real section."""
+        s, e = t2m(slot.start), t2m(slot.stop)
+        worst = 0
+        for d in days:
+            worst = max(worst, sum(n for (bs, be), n in self._placeholder_intervals[d].items()
+                                   if not (e <= bs or be <= s)))
+        return self._concurrency(days, slot) + worst < MAX_CONCURRENT
+
+    def placeholder_pressure(self, days: List[str], slot: TimeSlot) -> int:
+        """How crowded this slot is counting both ledgers — the tie-break used to
+        pick the least-bad pattern when every pattern is already full."""
+        s, e = t2m(slot.start), t2m(slot.stop)
+        worst = 0
+        for d in days:
+            worst = max(worst, sum(n for (bs, be), n in self._placeholder_intervals[d].items()
+                                   if not (e <= bs or be <= s)))
+        return self._concurrency(days, slot) + worst
+
     @property
     def slot_load(self) -> Dict[str, Dict[str, int]]:
         return self._slot_load
@@ -814,9 +909,17 @@ class TimeSlotScheduler:
         def dur_ok(t: TimeSlot) -> bool:
             return t.duration_min >= min_duration and (max_duration is None or t.duration_min <= max_duration)
 
+        # The `evening` column of timings.csv decides which slots belong to the
+        # graduate evening timetable. It used to be parsed and then ignored, with
+        # the split hard-coded to "starts at or after 18:00" instead — so marking
+        # a slot evening=TRUE did nothing, and a shop that wanted a 17:15 evening
+        # slot or a non-evening 18:00 slot had no way to say so. Start hour is
+        # still honoured for grad courses (C12 requires an 18:00 start), but the
+        # undergraduate exclusion now follows the column.
         if is_grad(sec.course_number):
             return [t for t in self.slots if GRAD_START_HR <= t.start.hour < GRAD_END_HR and dur_ok(t)]
-        slots = [t for t in self.slots if t.start.hour < GRAD_START_HR and dur_ok(t)]
+        slots = [t for t in self.slots
+                 if not t.evening and t.start.hour < GRAD_START_HR and dur_ok(t)]
         if force_pm:
             slots = [t for t in slots if t.start.hour >= AM_CUTOFF_HR]
         return slots
@@ -1058,19 +1161,27 @@ def build_schedule(
     # that can actually be staffed.
     def assign_priority(sec: Section) -> Tuple:
         pool = [f for f in fac_prefs.get(sec.course_number, []) if on_roster(f)]
-        # A section with a lab needs a lecture slot AND a 105-min lab slot that
-        # starts at the same clock time on a different day (C17) — far fewer
-        # placements satisfy that than a lecture-only section, so labs go first
-        # regardless of how contended their faculty pool is.
-        lab_first = 0 if sec.lab_hours > 0 else 1
+        # Course level is the primary ordering: upper-level undergrad, then grad,
+        # then lower-level undergrad (see course_level_tier).
+        #
+        # This replaced an earlier "sections with a lab go first" key. That key
+        # was actively harmful: it put EVERY lab-bearing section ahead of EVERY
+        # lecture-only one regardless of faculty scarcity, so a professor who was
+        # the sole qualified name for a lecture-only course had their whole load
+        # consumed by lab courses that had two or three alternative professors,
+        # before their one irreplaceable course was even considered. That is how
+        # COMP4726 (only Zaihan) and DATA3125 (only Weijie/Zaihan) fell to TBA
+        # while Zaihan taught three courses anyone else could have covered.
+        tier = course_level_tier(sec.course_number)
         if not pool:
-            return (1, lab_first, 0.0, sec.course_number, sec.id)
+            return (1, tier, 0.0, sec.course_number, sec.id)
         demand = course_section_counts.get(normalize(sec.course_number), 1) / len(pool)
-        # On equal demand, the course with fewer eligible professors goes first.
-        # Without this the tie broke alphabetically, so a course with a single
-        # candidate could lose to one with three and find its only candidate
-        # already full — the exact failure CYBR2500 was showing.
-        return (0, lab_first, -demand, len(pool), sec.course_number, sec.id)
+        # Within a tier, scarcity still decides: highest demand (sections per
+        # eligible professor) first, then the smallest faculty pool. Without this
+        # the tie broke alphabetically, so a course with a single candidate could
+        # lose to one with three and find its only candidate already full — the
+        # exact failure CYBR2500 was showing.
+        return (0, tier, -demand, len(pool), sec.course_number, sec.id)
 
     ordered = sorted(sections, key=assign_priority)
 
@@ -1422,8 +1533,94 @@ def build_schedule(
                     continue
                 # Reassign faculty only — time/room/days are unchanged, so room
                 # and concurrency (C11) bookings stay valid; just block the prof.
-                _assign(lec, fac, lab, "was TBA; foundation exception")
+                _assign(lec, fac, lab,
+                        "PREFERENCE EXCEPTION — not on this course's preference row; "
+                        "taking a leftover TBA foundation section to reach their load")
                 break
+
+    def _diagnose_staffing(sec: Section) -> str:
+        """Explain in plain English why no professor could take this section.
+
+        The old message — "No faculty satisfied all constraints" — named neither
+        the professors nor the reason, so a hiring problem, a course-load problem
+        and a clock problem all looked identical. There was no way to tell whether
+        the fix was to list another name in prof_preferences.csv, to raise someone's
+        load in faculty_load.csv, or to add a time slot.
+        """
+        listed = fac_prefs.get(sec.course_number, [])
+        if not listed:
+            return ("STAFFING — no faculty are listed for this course in "
+                    "prof_preferences.csv; add at least one name there")
+        pool = [f for f in listed if on_roster(f)]
+        if not pool:
+            return (f"STAFFING — the name(s) listed for this course "
+                    f"({', '.join(listed)}) cannot be used: each is either missing "
+                    f"from faculty_load.csv or has a course load of 0")
+
+        # Bucket every qualified professor by the FIRST rule that rules them out,
+        # in the same order can_assign() applies them, so the reason shown is the
+        # reason that actually blocked the assignment.
+        at_cap, at_course_cap, at_grad_cap, clash = [], [], [], []
+        for f in pool:
+            used, cap = faculty_load.get(f, 0), max_load(f)
+            if used >= cap:
+                at_cap.append(f"{f} ({used}/{cap} courses)")
+            elif fac_course_count.get((f, sec.course_number), 0) >= 2:
+                at_course_cap.append(f)
+            elif is_grad(sec.course_number) and fac_grad_count.get(f, 0) >= 2:
+                at_grad_cap.append(f)
+            else:
+                clash.append(f)
+
+        parts = []
+        if at_cap:
+            parts.append(f"at their full course load — {', '.join(at_cap)}")
+        if at_course_cap:
+            parts.append(f"already teaching 2 sections of this course — "
+                         f"{', '.join(at_course_cap)}")
+        if at_grad_cap:
+            parts.append(f"already teaching 2 graduate sections — {', '.join(at_grad_cap)}")
+        if clash:
+            parts.append(f"have load left but no day/time that fits alongside what they "
+                         f"already teach (9-hour daily span, {MAX_TEACHING_DAYS} teaching "
+                         f"days, {FACULTY_GAP_MIN}-min gap) — {', '.join(clash)}")
+
+        who = (f"{pool[0]} is the only qualified professor and is"
+               if len(pool) == 1 else
+               f"all {len(pool)} qualified professors ({', '.join(pool)}) are")
+        head = "STAFFING" if (at_cap or at_course_cap or at_grad_cap) else "FACULTY TIMING"
+        return f"{head} — {who} unavailable: " + "; ".join(parts)
+
+    def _diagnose_placement(sec: Section, per_day: int, sec_days: int) -> str:
+        """Explain why no legal time slot could be found, distinguishing a slot
+        menu that has nothing of the right length from one that is simply full."""
+        same_len = [s for s in time_sched.slots if s.duration_min == per_day]
+        if not same_len:
+            have = sorted({s.duration_min for s in time_sched.slots})
+            return (f"TIMING — this course needs a {per_day}-minute meeting "
+                    f"({sec_days} day(s)/week), but timings.csv only offers "
+                    f"{', '.join(str(d) for d in have)} minute slots. Either add a "
+                    f"{per_day}-minute row to timings.csv, or change this course's "
+                    f"meeting length in meeting_patterns.csv")
+        # Slots of the right length exist — say whether the blocker was the
+        # concurrency ceiling or the days those slots are restricted to.
+        blocked_by_cap = 0
+        for pattern in _patterns_for(sec):
+            for s in same_len:
+                if s.days_allowed and not all(d in s.days_allowed for d in pattern):
+                    continue
+                if overlaps_reserved(pattern, s.start, s.stop):
+                    continue
+                if not time_sched._slot_capacity_ok(pattern, s):
+                    blocked_by_cap += 1
+        if blocked_by_cap:
+            return (f"CONCURRENCY — every {per_day}-minute slot that fits this course "
+                    f"is already running {MAX_CONCURRENT} sections at once "
+                    f"(the max_concurrent_sections limit in settings.csv). Raise that "
+                    f"limit if the rooms really exist, or add more time slots")
+        return (f"TIMING — {per_day}-minute slots exist but none is legal for this "
+                f"course once the reserved Tue/Thu 12:00-13:00 hour and each slot's "
+                f"'Days Allowed' column are applied")
 
     # ── main scheduling loop ──────────────────────────────────────────────────
 
@@ -1452,7 +1649,8 @@ def build_schedule(
         # sections (e.g. grad courses whose preferred profs are all full) spread
         # across the week instead of piling onto Monday.
         if not chosen:
-            print(f"[WARN] {sec.id}: No faculty satisfied all constraints; trying TBA.")
+            print(f"[WARN] {sec.id} ({sec.course_number}): {_diagnose_staffing(sec)}. "
+                  f"Falling back to TBA.")
             tba_patterns = sorted(_patterns_for(sec), key=lambda p: sum(day_count.get(d, 0) for d in p))
             for days in tba_patterns:
                 result = _try_assign(sec, "TBA", days, force_pm)
@@ -1466,15 +1664,7 @@ def build_schedule(
         if not chosen:
             forced = True
             per_day_f = meeting_minutes(sec.course_number, sec.lecture_hours, sec_days)
-            has_slot = any(s.duration_min == per_day_f for s in time_sched.slots)
-            reason = (
-                f"no {per_day_f}-minute slot exists in timings.csv — add one, or change "
-                f"this course's meeting length in meeting_patterns.csv"
-                if not has_slot else
-                f"every {per_day_f}-minute slot is already at the "
-                f"{MAX_CONCURRENT}-section limit on all {sec_days}-day patterns "
-                f"(raise max_concurrent_sections in settings.csv, or add time slots)"
-            )
+            reason = _diagnose_placement(sec, per_day_f, sec_days)
             print(f"[CRITICAL] {sec.id} ({sec.course_number}): cannot be placed — {reason}. "
                   f"Forcing a placeholder; this section needs manual attention.")
             unplaced.append((sec.id, sec.course_number, reason))
@@ -1498,26 +1688,45 @@ def build_schedule(
                 cands = _order_fallback_slots(legal or base_cands, cand_days, force_pm)
                 if not cands:
                     continue
-                if time_sched._slot_capacity_ok(cand_days, cands[0]):
+                if time_sched.placeholder_capacity_ok(cand_days, cands[0]):
                     days_f, slot_f = cand_days, cands[0]
                     break
                 # Nothing with room here — keep the least-crowded option seen so
                 # far, across ALL patterns, so forced sections spread out instead
                 # of stacking on whichever pattern happened to come first.
-                load = time_sched._concurrency(cand_days, cands[0])
+                load = time_sched.placeholder_pressure(cand_days, cands[0])
                 if best_load is None or load < best_load:
                     days_f, slot_f, best_load = cand_days, cands[0], load
             if slot_f is None:
                 slot_f = base_cands[0] if base_cands else time_sched.slots[0]
+            # The lecture is a placeholder, so its lab must be one too. Finding a
+            # real room and time for the lab of a section that has no real lecture
+            # would book a room and consume a concurrency track for a class that
+            # is not actually scheduled — the lab was appearing in WATSN 001 while
+            # its own `unplaced` flag said it did not exist, so a consumer that
+            # filtered on `room != "UNPLACED"` and one that filtered on `unplaced`
+            # disagreed about what was in the room.
             lab_info_f = _find_lab_at("TBA", days_f, slot_f) if sec.lab_hours > 0 else None
+            if lab_info_f:
+                lab_day_f, lab_slot_f, _ = lab_info_f
+                lab_info_f = (lab_day_f, lab_slot_f, "UNPLACED")
             chosen = ("TBA", days_f, slot_f, "UNPLACED",
                       *(lab_info_f if lab_info_f else (None, None, None)))
 
         fac, days, slot, room, pre_lab_day, pre_lab_slot, pre_lab_room = chosen
 
-        # Commit lecture
-        room_assigner.book_room(room, days, slot.start, slot.stop)
-        time_sched.book(fac, days, slot)
+        # Commit lecture. A forced placeholder holds no real resources: booking a
+        # room it is not really in would make that room unavailable to a class
+        # that could actually use it, and calling time_sched.book would charge it
+        # against the max_concurrent_sections ceiling. Both were happening, so the
+        # C11 concurrency check was counting sections the scheduler had already
+        # declared unplaceable.
+        if room != "UNPLACED":
+            room_assigner.book_room(room, days, slot.start, slot.stop)
+        if forced:
+            time_sched.book_placeholder(days, slot)
+        else:
+            time_sched.book(fac, days, slot)
         faculty_load[fac] = faculty_load.get(fac, 0) + 1
         _tally(fac, sec.course_number, +1)
         _k = _time_key(sec.course_number, days, slot)
@@ -1555,8 +1764,11 @@ def build_schedule(
             if pre_lab_day is not None:
                 # Same-start lab found during assignment — commit it directly.
                 lab_day, lab_slot, lab_room = pre_lab_day, pre_lab_slot, pre_lab_room
-                lab_forced = False
-                room_assigner.book_room(lab_room, [lab_day], lab_slot.start, lab_slot.stop)
+                # A lab inherits its lecture's forced status: if the lecture is a
+                # placeholder the lab is one too, and holds no room (see above).
+                lab_forced = forced
+                if lab_room != "UNPLACED":
+                    room_assigner.book_room(lab_room, [lab_day], lab_slot.start, lab_slot.stop)
             else:
                 # Hard-fallback path: no same-start lab found; place lab anywhere available.
                 print(f"[WARN] {sec.id}-LAB: could not match lecture start time; scheduling independently.")
@@ -1574,7 +1786,10 @@ def build_schedule(
                             break
                     if lab_slot:
                         break
-                lab_forced = False
+                # If the lecture itself is a placeholder, the lab is one too even
+                # when a lab slot happens to be free — otherwise the lab of a
+                # section that was never really scheduled would book a real room.
+                lab_forced = forced
                 if lab_slot is None:
                     lab_forced = True
                     reason = f"no lab slot of {lab_min} min is free on any day"
@@ -1586,7 +1801,9 @@ def build_schedule(
                         cands = time_sched._eligible_slots(sec, lab_min, force_pm=False, max_duration=LAB_MAX_MIN)
                     cands = _order_fallback_slots(cands, [lab_day], force_pm)
                     lab_slot = cands[0] if cands else time_sched.slots[0]
-                lab_room = room_assigner.find_room(sec, [lab_day], lab_slot.start, lab_slot.stop, is_lab=True)
+                lab_room = (None if lab_forced else
+                            room_assigner.find_room(sec, [lab_day], lab_slot.start,
+                                                    lab_slot.stop, is_lab=True))
                 if lab_room is None:
                     if not lab_forced:
                         reason = "no room is free at the only time this lab could take"
@@ -1597,7 +1814,10 @@ def build_schedule(
                 else:
                     room_assigner.book_room(lab_room, [lab_day], lab_slot.start, lab_slot.stop)
 
-            time_sched.book(fac, [lab_day], lab_slot)
+            if lab_forced:
+                time_sched.book_placeholder([lab_day], lab_slot)
+            else:
+                time_sched.book(fac, [lab_day], lab_slot)
             _lk = _time_key(f"{sec.course_number}-LAB", [lab_day], lab_slot)
             course_time_count[_lk] = course_time_count.get(_lk, 0) + 1
             faculty_days_map.setdefault(fac, set()).add(lab_day)
@@ -1725,6 +1945,31 @@ def check_inputs(
         print(f"  ⚠  {demand} section(s) offered but total faculty load is only {supply} — "
               f"at least {demand - supply} section(s) must be TBA.")
         problems += 1
+
+    # Structural staffing check. A course can be impossible to staff even when
+    # every name lines up: a professor may teach at most 2 sections of one course
+    # (C3) and at most their declared load overall, so a course needs enough
+    # qualified professors, not just one. COMP3100 (3 sections, Leon the only
+    # qualified name, load 3) can never be fully staffed — but before this check
+    # it just produced three silent TBAs that looked like a scheduler bug.
+    for cn, course in sorted(offered.items()):
+        listed = next((v for k, v in fac_prefs.items() if normalize(k) == cn), [])
+        pool = [f for f in listed if faculty_limits.get(f, 0) > 0]
+        if not pool:
+            continue          # already reported above as "no faculty listed"
+        capacity = sum(min(faculty_limits.get(f, 0), 2) for f in pool)
+        if course.sections > capacity:
+            problems += 1
+            who = (f"{pool[0]}, its only qualified professor,"
+                   if len(pool) == 1 else
+                   f"its {len(pool)} qualified professors ({', '.join(pool)})")
+            print(f"  ⚠  {course.number} needs {course.sections} section(s) but {who} "
+                  f"can cover at most {capacity} "
+                  f"(a professor may teach ≤ 2 sections of one course, and no more "
+                  f"than their load in faculty_load.csv) — at least "
+                  f"{course.sections - capacity} section(s) will be TBA. "
+                  f"Add another qualified name in prof_preferences.csv, or reduce "
+                  f"the section count.")
 
     if not problems:
         print("  ✓  Course numbers and faculty names line up across all input files.")
@@ -1910,6 +2155,11 @@ class ConstraintChecker:
         for s in sections.values():
             if not s.start_time:
                 continue
+            # Placeholders hold no room and no track (see book_placeholder), so
+            # counting them here would report a concurrency figure that includes
+            # classes the scheduler already declared unplaceable.
+            if s.forced or s.room == "UNPLACED":
+                continue
             for d in s.days:
                 day_intervals[d].append((t2m(s.start_time), t2m(s.end_time)))
 
@@ -2069,10 +2319,21 @@ def check_non_overlap_groups(
     if not groups:
         return True
 
+    # Placeholder sections are excluded. An UNPLACED section holds an invented
+    # time the scheduler already rejected, so pairing against it produced lines
+    # like "✓ PASS Y3_FALL_CY: COMP3100 / COMP3400 — all 3 COMP3100 sections have
+    # a non-conflicting option" for three sections that have no real time at all.
+    # A PASS asserted over fabricated data is worse than no check.
     by_course: Dict[str, List[ScheduledSection]] = {}
+    placeholder_only: Dict[str, List[str]] = {}
     for s in sections.values():
-        if not s.is_lab:
-            by_course.setdefault(normalize(s.course_number), []).append(s)
+        if s.is_lab:
+            continue
+        cn = normalize(s.course_number)
+        if s.forced or s.room == "UNPLACED":
+            placeholder_only.setdefault(cn, []).append(s.section_id)
+        else:
+            by_course.setdefault(cn, []).append(s)
 
     known_sections = {normalize(c.number): c.sections for c in (all_courses or [])}
 
@@ -2095,7 +2356,11 @@ def check_non_overlap_groups(
         present = [c for c in courses if c in by_course]
         missing = [c for c in courses if c not in by_course]
         for c in missing:
-            if c not in known_sections:
+            if c in placeholder_only:
+                print(f"  ⚠ SKIP  {grp}: {c} could not be placed "
+                      f"({', '.join(placeholder_only[c])} are UNPLACED placeholders) — "
+                      f"this group cannot be verified until those sections are fixed")
+            elif c not in known_sections:
                 print(f"  ⚠ SKIP  {grp}: {c} is not in the course list "
                       f"(check for a typo or renamed course number) — not constrained")
             else:
@@ -2191,6 +2456,13 @@ def export_json(
                 # fell back to a placeholder. The UI flags these the way it flags
                 # TBA faculty, so they are visible rather than blending in.
                 "unplaced": bool(s.forced or s.room == "UNPLACED"),
+                # True when this section was filled by the foundation top-up — a
+                # professor outside the course's preference row taking a leftover
+                # TBA section of CS1/CS2/Data Structures to reach their load.
+                # It is the one sanctioned exception to C19, and without it in the
+                # export nothing downstream could tell a legitimate top-up apart
+                # from a genuine preference violation.
+                "topup": bool(s.topup),
             })
 
     with open(path, "w") as f:
