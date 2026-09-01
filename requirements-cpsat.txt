@@ -1,0 +1,11 @@
+# Extra dependency for the CP-SAT engine (main_cpsat.py) only.
+# main.py — the greedy engine — must keep running on a machine without this
+# installed, which is why ortools is imported lazily inside build_schedule_cpsat
+# and is NOT added to requirements.txt.
+#
+#     python3 -m pip install -r requirements-cpsat.txt
+#
+# Pinned to the 9.x line: the cp_model Python API (NewOptionalIntervalVar,
+# AddCumulative, AddNoOverlap, absolute_gap_limit) is stable across 9.x, and a
+# major bump has broken names before.
+ortools>=9.10,<10

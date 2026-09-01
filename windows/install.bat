@@ -315,8 +315,33 @@ call :say "Installing required packages (this can take a couple of minutes)..."
 if not errorlevel 1 goto :eof
 call :say "First attempt failed - retrying with a longer timeout..."
 "%VENV_PY%" -m pip install --no-cache-dir --retries 5 --timeout 60 -r "%APP_DIR%\requirements.txt"
-if not errorlevel 1 goto :eof
+if not errorlevel 1 goto :install_optional_deps
 set "FAILMSG=Could not install the required packages. If the messages above mention a connection or SSL error, your network is blocking pypi.org - ask IT to allow it, or try again on a different network."
+goto :eof
+
+
+rem --- The CP-SAT engine's extra package, deliberately NOT fatal --------------
+rem ortools is a large binary wheel and the one package here most likely to be
+rem refused by a locked-down network. The CP-SAT scheduler is an OPTIONAL second
+rem engine; the greedy scheduler is the product and does not import ortools at
+rem all. So a failure here must never fail the install - that would break a
+rem working app to add an optional one. The Run page checks at runtime and
+rem explains that CP-SAT is unavailable if this did not succeed.
+:install_optional_deps
+if not exist "%APP_DIR%\requirements-cpsat.txt" goto :eof
+call :say "Installing the optional CP-SAT solver (this one is large; the app works without it)..."
+"%VENV_PY%" -m pip install --no-cache-dir -r "%APP_DIR%\requirements-cpsat.txt" >>"%LOG%" 2>&1
+if not errorlevel 1 (
+    call :say "CP-SAT solver installed."
+    goto :eof
+)
+"%VENV_PY%" -m pip install --no-cache-dir --retries 5 --timeout 60 -r "%APP_DIR%\requirements-cpsat.txt" >>"%LOG%" 2>&1
+if not errorlevel 1 (
+    call :say "CP-SAT solver installed."
+) else (
+    call :say "Could not install the optional CP-SAT solver - skipping it."
+    call :say "The scheduler still works; the CP-SAT option on the Run page will say it is unavailable."
+)
 goto :eof
 
 

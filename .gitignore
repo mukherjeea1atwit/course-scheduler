@@ -21,3 +21,12 @@ math-test-data/
 # Backups the input editor writes next to the file it replaced
 data/*.old*.csv
 data/*.bak
+
+# Reference material and customer data received by email — not part of the app.
+# complete_csat_scheduler/ and new-copilot-changes/ are a vendor's CP-SAT
+# prototype and code review, kept locally as a knowledge source only; the
+# shipping CP-SAT engine is main_cpsat.py. data-mike/ is a copy of a customer's
+# own input files, used to reproduce their bugs.
+complete_csat_scheduler/
+new-copilot-changes/
+data-mike/

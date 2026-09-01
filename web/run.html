@@ -20,6 +20,15 @@
     h1   { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
 
+    /* ── Engine card ──
+       One per engine. They are visually separate cards, not tabs, because both
+       can be running at once and the dean needs to see both states at a glance. */
+    .engine { background: #fff; border: 1px solid var(--gray-100); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 22px; }
+    .engine-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+    .engine-name { font-size: 16px; font-weight: 700; }
+    .engine-speed { font-size: 12px; color: #6b7280; font-weight: 600; }
+    .engine-desc { color: #6b7280; font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; }
+
     /* ── Actions bar ── */
     .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
     .btn-run { padding: 9px 22px; border-radius: 5px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; background: var(--wit-red); color: #fff; }
@@ -32,6 +41,17 @@
     .badge-running { background: #fef3c7; color: #92400e; }
     .badge-done    { background: #d1fae5; color: #065f46; }
     .badge-error   { background: #fee2e2; color: #991b1b; }
+    .badge-off     { background: #e5e7eb; color: #6b7280; }
+
+    /* Wall clock — only the CP-SAT card has one. A solve that prints nothing for
+       ninety seconds looks hung without it. */
+    .clock { font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; color: #374151; font-variant-numeric: tabular-nums; }
+    .clock-max { color: #9ca3af; }
+
+    /* Why the Run button is disabled, when it is. */
+    .unavailable { font-size: 12px; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 5px; padding: 7px 11px; margin-bottom: 12px; display: none; }
+    .unavailable.show { display: block; }
+    .unavailable code { font-family: 'Menlo', 'Consolas', monospace; }
 
     /* ── Log output ── */
     .log-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
@@ -40,8 +60,8 @@
       color: #c9d1d9;
       border-radius: 6px;
       padding: 14px 16px;
-      min-height: 320px;
-      max-height: 60vh;
+      min-height: 260px;
+      max-height: 55vh;
       overflow-y: auto;
       font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
       font-size: 12px;
@@ -76,77 +96,289 @@
 <body>
 <div class="page">
   <h1>Run Scheduler</h1>
-  <p class="sub">Runs the Python scheduler against the current input files and streams output live.</p>
+  <p class="sub">
+    Two engines, two separate schedules. They read the same input files but write
+    different output files, so you can start one and keep using the other's
+    results — including while it is still solving.
+  </p>
 
-  <div class="actions">
-    <button class="btn-run" id="runBtn" onclick="startRun()">▶ Run Schedule</button>
-    <span class="badge badge-idle" id="badge">Idle</span>
-  </div>
+  <!-- ── Greedy ── -->
+  <section class="engine" id="card-greedy">
+    <div class="engine-head">
+      <span class="engine-name">Greedy scheduler</span>
+      <span class="engine-speed">instant</span>
+    </div>
+    <p class="engine-desc">
+      The original engine. Places sections one at a time in priority order and
+      finishes in well under a second. Writes <strong>schedule.json</strong> /
+      <strong>schedule.csv</strong>.
+    </p>
+    <div class="unavailable" id="why-greedy"></div>
+    <div class="actions">
+      <button class="btn-run" id="btn-greedy">▶ Run Greedy</button>
+      <span class="badge badge-idle" id="badge-greedy">Idle</span>
+    </div>
+    <div class="log-label">Output</div>
+    <div class="log" id="log-greedy">
+      <span class="log-empty">Output will appear here when you run this engine.</span>
+    </div>
+    <div class="downloads" id="dl-greedy">
+      <span class="downloads-label">Downloads:</span>
+      <a class="btn-dl btn-dl-primary" href="/api/schedule?engine=greedy" download="schedule.json">⬇ schedule.json</a>
+      <a class="btn-dl" href="/api/schedule/csv?engine=greedy" download="schedule_simple.csv">⬇ schedule_simple.csv</a>
+      <a class="btn-dl" href="/api/schedule/csv?engine=greedy&format=banner" download="schedule.csv">⬇ schedule.csv (Banner)</a>
+      <a class="btn-dl" href="/schedule?source=greedy">📅 View Schedule</a>
+    </div>
+  </section>
 
-  <div class="log-label">Output</div>
-  <div class="log" id="log">
-    <span class="log-empty">Output will appear here when you run the scheduler.</span>
-  </div>
-
-  <div class="downloads" id="downloads">
-    <span class="downloads-label">Downloads:</span>
-    <a class="btn-dl btn-dl-primary" href="/api/schedule" download="schedule.json">⬇ schedule.json</a>
-    <a class="btn-dl" href="/api/schedule/csv" download="schedule.csv">⬇ schedule.csv</a>
-    <a class="btn-dl" href="/schedule">📅 View Schedule</a>
-  </div>
+  <!-- ── CP-SAT ── -->
+  <section class="engine" id="card-cpsat">
+    <div class="engine-head">
+      <span class="engine-name">CP-SAT scheduler</span>
+      <span class="engine-speed">typically tens of seconds</span>
+    </div>
+    <p class="engine-desc">
+      Solves the whole timetable at once with a constraint solver, which usually
+      finds fewer unplaced sections than the greedy engine.
+      <strong>Expect tens of seconds, and occasionally a couple of minutes</strong> —
+      solve time varies substantially from run to run, and the maximum is 8 minutes,
+      after which the best schedule found so far is used. That variation is
+      deliberate: the engine is not seeded, so re-running it gives you a
+      different valid timetable to choose between. Writes
+      <strong>schedule_cpsat.json</strong> / <strong>schedule_cpsat.csv</strong>,
+      so it never touches the greedy engine's output — you can keep reading and
+      exporting the greedy schedule while this one solves.
+    </p>
+    <div class="unavailable" id="why-cpsat"></div>
+    <div class="actions">
+      <button class="btn-run" id="btn-cpsat">▶ Run CP-SAT</button>
+      <span class="badge badge-idle" id="badge-cpsat">Idle</span>
+      <span class="clock" id="clock-cpsat">—</span>
+    </div>
+    <div class="log-label">Output</div>
+    <div class="log" id="log-cpsat">
+      <span class="log-empty">Output will appear here when you run this engine.</span>
+    </div>
+    <div class="downloads" id="dl-cpsat">
+      <span class="downloads-label">Downloads:</span>
+      <a class="btn-dl btn-dl-primary" href="/api/schedule?engine=cpsat" download="schedule_cpsat.json">⬇ schedule_cpsat.json</a>
+      <a class="btn-dl" href="/api/schedule/csv?engine=cpsat" download="schedule_cpsat_simple.csv">⬇ schedule_cpsat_simple.csv</a>
+      <a class="btn-dl" href="/api/schedule/csv?engine=cpsat&format=banner" download="schedule_cpsat.csv">⬇ schedule_cpsat.csv (Banner)</a>
+      <a class="btn-dl" href="/schedule?source=cpsat">📅 View Schedule</a>
+    </div>
+  </section>
 </div>
 
 <script>
-let _source = null;
-let _running = false;
-// How many transcript lines this page has already rendered. The stream resumes
-// from here, so reconnecting never duplicates or skips output.
-let _cursor = 0;
+/* Two engines, one page. Everything below is written once and instantiated per
+ * engine — a second copy of the console code is exactly how the two would drift
+ * apart. Each instance talks only to its own ?engine= endpoints, so a CP-SAT
+ * solve can never stall or overwrite what the greedy console is showing. */
 
-async function startRun() {
-  if (_running) return;
+const BADGE_TEXT = { idle: 'Idle', running: 'Running…', done: 'Complete ✓', error: 'Error ✗', off: 'Unavailable' };
 
-  clearLog();
-  document.getElementById('downloads').classList.remove('show');
+function EngineConsole(key, opts) {
+  const el = {
+    btn:    document.getElementById('btn-' + key),
+    badge:  document.getElementById('badge-' + key),
+    log:    document.getElementById('log-' + key),
+    dl:     document.getElementById('dl-' + key),
+    why:    document.getElementById('why-' + key),
+    clock:  document.getElementById('clock-' + key),   // CP-SAT only
+  };
 
-  const res = await fetch('/api/run', { method: 'POST' });
-  if (res.status === 409) {
-    log('Scheduler already running — connecting to output stream…', 'info');
-  } else if (!res.ok) {
-    log('Failed to start: ' + (await res.text()), 'error');
-    return;
-  }
+  const self = {
+    key,
+    source: null,
+    running: false,
+    available: true,
+    /* How many transcript lines this console has already rendered. The stream
+     * resumes from here, so reconnecting never duplicates or skips output. */
+    cursor: 0,
+    /* Wall-clock bookkeeping. startedAt is derived from the server's `elapsed`
+     * rather than from when this page loaded — a page opened halfway through a
+     * solve must still show the true elapsed time, not zero. */
+    startedAt: null,
+    timeLimit: opts.timeLimit || null,
+    timer: null,
+  };
 
-  // A new run resets the server-side transcript to index 0.
-  _cursor = 0;
-  setRunning(true);
-  connectStream();
-}
+  el.btn.addEventListener('click', () => self.start());
 
-function connectStream() {
-  _source = new EventSource('/api/run/stream?since=' + _cursor);
+  self.start = async function () {
+    if (self.running || !self.available) return;
+    self.clearLog();
+    el.dl.classList.remove('show');
 
-  _source.onmessage = (e) => {
-    if (e.data === '__DONE__') {
-      _source.close(); _source = null;
-      setRunning(false);
-      setBadge('done');
-      document.getElementById('downloads').classList.add('show');
+    let res;
+    try {
+      res = await fetch('/api/run?engine=' + key, { method: 'POST' });
+    } catch (e) {
+      self.log('[Could not reach the server: ' + e.message + ']', 'error');
+      self.setBadge('error');
       return;
     }
-    logServer(e.data, classifyLine(e.data));
+    if (res.status === 409) {
+      /* Same engine already going — the other engine running is NOT a conflict
+       * and never lands here. Attach to the run in progress instead of failing. */
+      self.log('This engine is already running — connecting to its output…', 'info');
+      self.reload();
+      return;
+    }
+    if (!res.ok) {
+      self.log(await self.errorText(res), 'error');
+      self.setBadge('error');
+      return;
+    }
+
+    // A new run resets this engine's server-side transcript to index 0.
+    self.cursor = 0;
+    self.startedAt = Date.now();
+    self.setRunning(true);
+    self.connectStream();
   };
 
-  ['warn', 'critical', 'pass', 'fail'].forEach(kind =>
-    _source.addEventListener(kind, (e) => logServer(e.data, kind)));
-
-  _source.onerror = () => {
-    if (!_running) return;
-    _source.close(); _source = null;
-    setRunning(false);
-    setBadge('error');
-    log('[Connection to server lost]', 'error');
+  self.errorText = async function (res) {
+    try {
+      const body = await res.json();
+      if (body && body.detail) return body.detail;
+    } catch (e) { /* not JSON */ }
+    return 'Failed to start (HTTP ' + res.status + ')';
   };
+
+  self.connectStream = function () {
+    self.source = new EventSource('/api/run/stream?engine=' + key + '&since=' + self.cursor);
+
+    self.source.onmessage = (e) => {
+      if (e.data === '__DONE__') {
+        self.closeStream();
+        self.setRunning(false);
+        self.setBadge('done');
+        el.dl.classList.add('show');
+        return;
+      }
+      self.logServer(e.data, classifyLine(e.data));
+    };
+
+    ['warn', 'critical', 'pass', 'fail'].forEach(kind =>
+      self.source.addEventListener(kind, (e) => self.logServer(e.data, kind)));
+
+    self.source.onerror = () => {
+      if (!self.running) return;
+      self.closeStream();
+      self.setRunning(false);
+      self.setBadge('error');
+      self.log('[Connection to server lost]', 'error');
+    };
+  };
+
+  self.closeStream = function () {
+    if (self.source) { self.source.close(); self.source = null; }
+  };
+
+  self.log = function (text, cls) {
+    // Remove placeholder on first real line
+    const empty = el.log.querySelector('.log-empty');
+    if (empty) empty.remove();
+    const span = document.createElement('span');
+    span.className = 'ln ln-' + cls;
+    span.textContent = text;
+    el.log.appendChild(span);
+    el.log.scrollTop = el.log.scrollHeight;
+  };
+
+  /* A line that came from the server transcript. Only these advance the cursor —
+   * local notices like "Reconnecting…" are not part of the transcript, and
+   * counting them would make the stream resume at the wrong place. */
+  self.logServer = function (text, cls) {
+    self.log(text, cls);
+    self.cursor++;
+  };
+
+  self.clearLog = function () {
+    el.log.innerHTML = '<span class="log-empty">Starting…</span>';
+  };
+
+  self.setRunning = function (state) {
+    self.running = state;
+    el.btn.disabled = state || !self.available;
+    if (state) self.setBadge('running');
+    self.tickClock();
+    if (state && !self.timer && el.clock) {
+      self.timer = setInterval(self.tickClock, 1000);
+    } else if (!state && self.timer) {
+      clearInterval(self.timer); self.timer = null;
+    }
+  };
+
+  self.setBadge = function (state) {
+    el.badge.className = 'badge badge-' + state;
+    el.badge.textContent = BADGE_TEXT[state];
+  };
+
+  /* Elapsed / maximum, refreshed once a second. Shown for CP-SAT only: the
+   * greedy engine is done before the first tick would fire. */
+  self.tickClock = function () {
+    if (!el.clock) return;
+    if (self.startedAt === null) { el.clock.textContent = '—'; return; }
+    const secs = Math.max(0, Math.round((Date.now() - self.startedAt) / 1000));
+    const max = self.timeLimit ? ' / ' + Math.round(self.timeLimit) + ' s max' : '';
+    el.clock.innerHTML = (self.running ? 'Elapsed ' : 'Took ') + fmtDuration(secs) +
+      '<span class="clock-max">' + max + '</span>';
+  };
+
+  /* Mark the engine as unusable and say why, rather than letting the user press
+   * a button whose run would die on a missing import. */
+  self.setAvailability = function (available, reason) {
+    self.available = available;
+    el.btn.disabled = !available || self.running;
+    if (available) {
+      el.why.classList.remove('show');
+      el.why.textContent = '';
+      if (!self.running && el.badge.textContent === BADGE_TEXT.off) self.setBadge('idle');
+    } else {
+      el.why.textContent = reason || 'This engine is not available on this machine.';
+      el.why.classList.add('show');
+      self.setBadge('off');
+    }
+  };
+
+  /* Replay this engine's transcript, then follow along if it is still going.
+   * This is what makes each console survive leaving the Run tab: the output
+   * lives on the server, per engine, not in this page. */
+  self.reload = async function () {
+    // Two reloads in flight would each open a stream and only one of them would
+    // ever be closed, so the console would print every line twice. The page
+    // load and the first availability poll can otherwise collide exactly here.
+    if (self.reloading) return;
+    self.reloading = true;
+    let d;
+    try {
+      d = await (await fetch('/api/run/log?engine=' + key)).json();
+    } catch (e) { self.reloading = false; return; }
+    self.reloading = false;
+    self.closeStream();
+    if (d.lines.length) {
+      self.clearLog();
+      d.lines.forEach(l => self.log(l.text, l.cls));
+    }
+    self.cursor = d.next;
+    if (d.time_limit) self.timeLimit = d.time_limit;
+    // The server owns elapsed time; back-date the local clock from it so a
+    // reload mid-solve shows the real number.
+    self.startedAt = (d.elapsed === null || d.elapsed === undefined)
+      ? null : Date.now() - d.elapsed * 1000;
+    if (d.running) {
+      self.setRunning(true);
+      self.connectStream();
+    } else {
+      self.setRunning(false);
+      if (d.state === 'done') { self.setBadge('done'); el.dl.classList.add('show'); }
+      else if (d.state === 'error') self.setBadge('error');
+    }
+  };
+
+  return self;
 }
 
 function classifyLine(text) {
@@ -154,61 +386,39 @@ function classifyLine(text) {
   return 'info';
 }
 
-function log(text, cls) {
-  const el = document.getElementById('log');
-  // Remove placeholder on first real line
-  const empty = el.querySelector('.log-empty');
-  if (empty) empty.remove();
-  const span = document.createElement('span');
-  span.className = `ln ln-${cls}`;
-  span.textContent = text;
-  el.appendChild(span);
-  el.scrollTop = el.scrollHeight;
+function fmtDuration(secs) {
+  if (secs < 60) return secs + ' s';
+  return Math.floor(secs / 60) + ' m ' + String(secs % 60).padStart(2, '0') + ' s';
 }
 
-/* A line that came from the server transcript. Only these advance the cursor —
- * local notices like "Reconnecting…" are not part of the transcript, and
- * counting them would make the stream resume at the wrong place. */
-function logServer(text, cls) {
-  log(text, cls);
-  _cursor++;
+const CONSOLES = {
+  greedy: EngineConsole('greedy', {}),
+  cpsat:  EngineConsole('cpsat', { timeLimit: 480 }),
+};
+
+/* Availability can change without this page reloading (someone installs
+ * OR-Tools, or the other browser tab starts a run), so it is polled rather than
+ * read once. Two seconds is cheap — the endpoint only stats a file and checks
+ * an import spec. */
+async function refreshEngines() {
+  let d;
+  try {
+    d = await (await fetch('/api/engines')).json();
+  } catch (e) { return; }
+  Object.entries(d.engines).forEach(([key, info]) => {
+    const c = CONSOLES[key];
+    if (!c) return;
+    c.setAvailability(info.available, info.reason);
+    if (info.time_limit) c.timeLimit = info.time_limit;
+    // A run started from another tab (or before this page loaded) should show
+    // up here too, not just one this page kicked off.
+    if (info.running && !c.running) c.reload();
+  });
 }
 
-function clearLog() {
-  document.getElementById('log').innerHTML = '<span class="log-empty">Starting…</span>';
-}
-
-function setRunning(state) {
-  _running = state;
-  document.getElementById('runBtn').disabled = state;
-  if (state) setBadge('running');
-}
-
-function setBadge(state) {
-  const b = document.getElementById('badge');
-  b.className = 'badge badge-' + state;
-  b.textContent = { idle: 'Idle', running: 'Running…', done: 'Complete ✓', error: 'Error ✗' }[state];
-}
-
-/* On load, replay the transcript of the current or most recent run, then follow
- * along if it is still going. This is what makes the console survive leaving the
- * Run tab: the output lives on the server, not in this page. */
-fetch('/api/run/log').then(r => r.json()).then(({ lines, next, running, state }) => {
-  if (lines.length) {
-    clearLog();
-    lines.forEach(l => log(l.text, l.cls));
-    _cursor = next;
-  }
-  if (running) {
-    setRunning(true);
-    connectStream();
-  } else if (state === 'done') {
-    setBadge('done');
-    document.getElementById('downloads').classList.add('show');
-  } else if (state === 'error') {
-    setBadge('error');
-  }
-}).catch(() => {});
+Object.values(CONSOLES).forEach(c => c.reload());
+refreshEngines();
+setInterval(refreshEngines, 2000);
 </script>
 
 <script src="/web/nav.js"></script>

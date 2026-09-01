@@ -322,7 +322,12 @@ report(7, f"FACULTY GAP (>= {GAP_MIN} min)", v,
 
 # ── 8. MAX CONCURRENT SECTIONS (placed only) ─────────────────────────────────
 def peak(events):
-    best = (0, None, None, [])
+    # Day/minute default to placeholders rather than None: with an empty event
+    # list (a dataset where nothing could be placed at all, which the engines are
+    # required to survive) the caller formats best[2] as HH:MM, and None // 60
+    # raised TypeError — the validator crashed on exactly the degenerate input it
+    # exists to check.
+    best = (0, "—", 0, [])
     for d in DAYS:
         de = [e for e in events if e["day"] == d]
         for t in range(0, 24 * 60):

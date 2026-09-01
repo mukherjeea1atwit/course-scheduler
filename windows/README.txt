@@ -46,6 +46,23 @@ Installing (and re-installing / updating):
   If sections come out marked UNPLACED right after an update, an old
   timings.csv is the first thing to check.
 
+Two schedulers:
+  - The Run page has two engines. The Greedy scheduler is the original one
+    and finishes instantly. The CP-SAT scheduler solves the whole timetable
+    at once, takes tens of seconds (occasionally a couple of minutes, with an
+    8 minute maximum), and often leaves fewer sections unstaffed.
+  - They write different files and never overwrite each other, so you can
+    start CP-SAT and keep reading, viewing and exporting the greedy schedule
+    while it works. The Schedule page has a dropdown to pick which one you
+    are looking at.
+  - CP-SAT is not seeded on purpose: running it again gives you a different
+    valid timetable, so you can generate a few and pick one.
+  - CP-SAT needs one extra package (ortools). install.bat installs it, but if
+    that fails - it is large, and some networks block it - the rest of the app
+    is unaffected and the Run page will say CP-SAT is unavailable. To add it
+    later, run this from the course-scheduler folder:
+        venv\Scripts\python.exe -m pip install -r requirements-cpsat.txt
+
 Running the scheduler:
   - Double-click the "WIT Class Scheduler" shortcut on your Desktop
     (or run.bat in this folder).

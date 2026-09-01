@@ -442,6 +442,65 @@
             background-color: #ffffff;
         }
 
+        /* ---------- Schedule source (which engine is on screen) ----------
+           Deliberately loud, and the first thing in the header row. There are
+           now two schedules on disk and they look identical once exported, so
+           the only protection against sending Banner the wrong one is that the
+           person exporting can see, without looking for it, which engine they
+           are looking at. */
+        .source-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 10px 5px 12px;
+            border-radius: 999px;
+            border: 2px solid var(--wit-red);
+            background: #fff5f5;
+        }
+
+        .source-picker[data-source="cpsat"] {
+            border-color: #1d4ed8;
+            background: #eff6ff;
+        }
+
+        .source-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--gray-600);
+            font-weight: 700;
+        }
+
+        .source-picker .select {
+            min-width: 150px;
+            font-weight: 700;
+        }
+
+        .source-badge {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: var(--wit-red);
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        .source-picker[data-source="cpsat"] .source-badge {
+            background: #1d4ed8;
+        }
+
+        /* Printed sheets leave the building, so they carry the engine name too —
+           the picker itself is hidden with the rest of the header row. */
+        .print-source {
+            display: none;
+            font-size: 12px;
+            color: #374151;
+            margin-top: 2px;
+        }
+
         /* ---------- Panels & boards ---------- */
         .panel {
             flex: 1;
@@ -1214,9 +1273,20 @@
             <main class="content">
                 <div class="print-header" id="printHeader">
                     <h1 id="printHeaderTitle"></h1>
+                    <div class="print-source" id="printSource"></div>
                 </div>
                 <div class="view-header-row">
                     <div class="view-title" id="viewTitle">Day Schedule</div>
+
+                    <!-- Which engine's output is on screen. See .source-picker. -->
+                    <div class="source-picker" id="sourcePicker" data-source="greedy">
+                        <span class="source-label">Source</span>
+                        <select class="select" id="sourceSelect" title="Which scheduling engine's output to display">
+                            <option value="greedy">Greedy</option>
+                            <option value="cpsat">CP-SAT</option>
+                        </select>
+                        <span class="source-badge" id="sourceBadge">Greedy</span>
+                    </div>
 
                     <div class="controls">
                         <span class="controls-label">Filter</span>
@@ -2344,7 +2414,11 @@
             const original = btn ? btn.textContent : '';
             try {
                 if (btn) { btn.disabled = true; btn.textContent = '…'; }
-                const res = await fetch(`/api/schedule/csv?format=${encodeURIComponent(format)}`);
+                // The export follows the picker, never the default. Downloading
+                // the greedy sheet while the CP-SAT one is on screen is exactly
+                // the mistake the source picker exists to prevent.
+                const res = await fetch(`/api/schedule/csv?format=${encodeURIComponent(format)}`
+                                        + `&engine=${encodeURIComponent(SCHEDULE_SOURCE)}`);
                 if (!res.ok) {
                     let detail = `HTTP ${res.status}`;
                     try { detail = (await res.json()).detail || detail; } catch (e) { /* not JSON */ }
@@ -2353,8 +2427,11 @@
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
+                // Engine in the filename, so two exports in one Downloads folder
+                // stay distinguishable after the browser has forgotten where
+                // they came from.
+                a.download = SOURCES[SCHEDULE_SOURCE].files[format];
                 a.href = url;
-                a.download = format === 'banner' ? 'schedule.csv' : 'schedule_simple.csv';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -2513,9 +2590,17 @@
         const printHeader = document.getElementById('printHeader');
         const printFooter = document.getElementById('printFooter');
         const printHeaderTitle = document.getElementById('printHeaderTitle');
+        const printSourceEl = document.getElementById('printSource');
 
         function showPrintChrome() {
             printHeaderTitle.textContent = getPrintTitle();
+            // A printed sheet outlives the screen it came from, and the picker
+            // is hidden by the print stylesheet, so the engine name is stamped
+            // into the header instead.
+            if (printSourceEl) {
+                printSourceEl.textContent = `Generated by the ${SOURCES[SCHEDULE_SOURCE].label} scheduler`;
+                printSourceEl.style.display = 'block';
+            }
             printHeader.style.display = 'block';
             printFooter.style.display = 'block';
         }
@@ -2553,7 +2638,7 @@
             });
             */
 
-        function loadScheduleData(data) {
+        function loadScheduleData(data, opts) {
             if (!Array.isArray(data)) {
                 throw new Error('JSON must be an array of class objects.');
             }
@@ -2564,7 +2649,10 @@
             populateSelectors();
             initBoards();
             renderCourse();
-            setView('day');
+            // Switching engine re-renders everything, but dropping the user back
+            // on the Day tab every time would make comparing the same professor
+            // across the two schedules needlessly tedious.
+            setView((opts && opts.keepView) ? currentView : 'day');
         }
 
         /* ── Empty-state helpers ── */
@@ -2612,22 +2700,123 @@
             });
         }
 
+        /* ── Schedule source ──
+         * Two engines write two schedules with an identical JSON shape. This
+         * page shows exactly one of them at a time, and everything downstream —
+         * the boards, the CSV export, the print header — reads SCHEDULE_SOURCE
+         * rather than assuming the greedy engine. */
+        const SOURCES = {
+            greedy: {
+                label: 'Greedy',
+                files: { simple: 'schedule_simple.csv', banner: 'schedule.csv' },
+            },
+            cpsat: {
+                label: 'CP-SAT',
+                files: { simple: 'schedule_cpsat_simple.csv', banner: 'schedule_cpsat.csv' },
+            },
+        };
+
+        // Greedy is the default, as it has always been. ?source=cpsat is what the
+        // Run page's per-engine "View Schedule" links use.
+        let SCHEDULE_SOURCE = 'greedy';
+        (function () {
+            const q = new URLSearchParams(window.location.search).get('source');
+            if (q && SOURCES[q]) SCHEDULE_SOURCE = q;
+        })();
+
+        const sourceSelect = document.getElementById('sourceSelect');
+        const sourcePicker = document.getElementById('sourcePicker');
+        const sourceBadge = document.getElementById('sourceBadge');
+
+        function paintSourceChrome() {
+            if (sourceSelect) sourceSelect.value = SCHEDULE_SOURCE;
+            // The picker's own colour changes with the engine, so the difference
+            // is visible from across the room and not only by reading the label.
+            if (sourcePicker) sourcePicker.dataset.source = SCHEDULE_SOURCE;
+            if (sourceBadge) sourceBadge.textContent = `Showing ${SOURCES[SCHEDULE_SOURCE].label}`;
+            document.title = `${SOURCES[SCHEDULE_SOURCE].label} schedule — WIT Class Scheduler`;
+        }
+
+        /* Fetch and render one engine's schedule. Any failure leaves the picker
+         * pointing at what is actually on screen: silently showing the greedy
+         * schedule under a "CP-SAT" label is worse than an empty board. */
+        async function loadScheduleFor(engine, opts) {
+            try {
+                const res = await fetch(`/api/schedule?engine=${encodeURIComponent(engine)}`);
+                if (!res.ok) {
+                    let detail = `HTTP ${res.status}`;
+                    try { detail = (await res.json()).detail || detail; } catch (e) { /* not JSON */ }
+                    EVENTS = [];
+                    showEmptyState();
+                    showToast(detail, 'err');
+                    return false;
+                }
+                loadScheduleData(await res.json(), opts);
+                hideEmptyState();
+                return true;
+            } catch (err) {
+                EVENTS = [];
+                showEmptyState();
+                showToast(`Could not load the ${SOURCES[engine].label} schedule — ${err.message}`, 'err');
+                return false;
+            }
+        }
+
+        if (sourceSelect) {
+            sourceSelect.addEventListener('change', async () => {
+                const wanted = sourceSelect.value;
+                if (wanted === SCHEDULE_SOURCE) return;
+                SCHEDULE_SOURCE = wanted;
+                paintSourceChrome();
+                await loadScheduleFor(SCHEDULE_SOURCE, { keepView: true });
+            });
+        }
+
+        /* Keep the CP-SAT option honest about whether it can be picked. Polled
+         * because a run started on the Run tab finishes without this page
+         * reloading, and the option has to become selectable when it does. */
+        async function refreshSourceOptions() {
+            if (!sourceSelect) return;
+            let info;
+            try {
+                info = (await (await fetch('/api/engines')).json()).engines;
+            } catch (e) { return; }
+            Object.entries(info).forEach(([key, eng]) => {
+                const opt = sourceSelect.querySelector(`option[value="${key}"]`);
+                if (!opt) return;
+                let suffix = '';
+                let disabled = false;
+                if (eng.running) {
+                    suffix = ' — running…';         // output exists but is about to be replaced
+                } else if (!eng.has_output) {
+                    suffix = eng.available ? ' — not generated yet' : ' — not installed';
+                    disabled = true;
+                }
+                opt.textContent = SOURCES[key] ? SOURCES[key].label + suffix : key + suffix;
+                // Never disable what is currently on screen — the select would
+                // then show a blank value and the user could not switch back.
+                opt.disabled = disabled && key !== SCHEDULE_SOURCE;
+                opt.title = eng.available ? '' : (eng.reason || '');
+            });
+        }
+
         /* ── Auto-load schedule from server on startup ── */
         (async function () {
+            paintSourceChrome();
             // TRACKS_DAY must be known before the first render — the boards size
             // their columns from it.
             await Promise.all([loadTracksSetting(), loadFacultyRoster()]);
-            try {
-                const res = await fetch('/api/schedule');
-                if (res.ok) {
-                    loadScheduleData(await res.json());
-                    hideEmptyState();
-                } else {
-                    showEmptyState();
-                }
-            } catch (_) {
-                showEmptyState();
+            const ok = await loadScheduleFor(SCHEDULE_SOURCE);
+            if (!ok && SCHEDULE_SOURCE !== 'greedy') {
+                // Arriving at ?source=cpsat before that engine has ever run is a
+                // dead end otherwise. Fall back rather than showing an empty
+                // board, but only after saying why.
+                SCHEDULE_SOURCE = 'greedy';
+                paintSourceChrome();
+                await loadScheduleFor(SCHEDULE_SOURCE);
             }
+            refreshSourceOptions();
+            setInterval(refreshSourceOptions, 3000);
         })();
 
     </script>

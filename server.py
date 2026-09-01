@@ -1,7 +1,7 @@
 """WIT Class Scheduler — Web API"""
 import asyncio
-import contextlib
 import csv
+import importlib.util
 import io
 import json
 import os
@@ -9,6 +9,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -248,6 +249,12 @@ def _require_file(slug: str) -> Path:
 
 
 # ── Scheduler state ───────────────────────────────────────────────────────────
+# There are two engines and they are independent processes-worth of work sharing
+# one server, so every piece of run state below is PER ENGINE. A single global
+# _busy/_transcript pair was enough while main.py was the only engine; it stopped
+# being enough the moment CP-SAT arrived, because a CP-SAT solve takes minutes
+# and the dean still wants to run, read and export the greedy schedule during it.
+#
 # The run output is kept here rather than only pushed down the SSE stream.
 #
 # Two reasons. The Run tab is a separate page, so navigating to Inputs or
@@ -257,15 +264,110 @@ def _require_file(slug: str) -> Path:
 # only ever saw the lines printed *after* it reconnected; everything earlier was
 # gone. Keeping the transcript server-side fixes both: any client can ask for
 # the whole run so far and then follow along from that point.
-_busy = False
-_run_state = "idle"          # idle | running | done | error
-_transcript: List[Dict[str, str]] = []
-_dropped = 0                 # lines trimmed off the front, so indices stay absolute
-_transcript_cv = threading.Condition()
 
 # A full run prints a few hundred lines. The cap only exists so a pathological
 # run cannot grow the process without bound; it is far above normal output.
 MAX_TRANSCRIPT_LINES = 20000
+
+# Mirrors CPSAT_TIME_LIMIT_S in main_cpsat.py. Duplicated rather than imported
+# because server.py must not import main_cpsat at module level — that module is
+# optional on a machine that only ever runs the greedy engine, and the greedy
+# path has to keep working when it is absent.
+CPSAT_TIME_LIMIT_S = 480.0
+
+# Per-engine file names. Distinct on both sides, so a CP-SAT run can never
+# overwrite something the greedy engine produced (and vice versa) — that
+# separation is the whole reason the two engines can be run side by side.
+ENGINES: Dict[str, Dict[str, Any]] = {
+    "greedy": {
+        "label":  "Greedy",
+        "json":   "schedule.json",
+        "simple": "schedule_simple.csv",
+        "banner": "schedule.csv",
+    },
+    "cpsat": {
+        "label":  "CP-SAT",
+        "json":   "schedule_cpsat.json",
+        "simple": "schedule_cpsat_simple.csv",
+        "banner": "schedule_cpsat.csv",
+    },
+}
+
+DEFAULT_ENGINE = "greedy"
+
+
+class _EngineRun:
+    """Everything one engine needs to have a run in flight, on its own.
+
+    Each engine owns its transcript, its state word and — critically — its own
+    Condition. Sharing one condition would have every greedy line wake every
+    CP-SAT stream reader and vice versa; separate locks also mean a slow reader
+    on one console cannot stall the other engine's emitter.
+    """
+
+    def __init__(self, key: str, label: str) -> None:
+        self.key = key
+        self.label = label
+        self.busy = False
+        self.state = "idle"              # idle | running | done | error
+        self.transcript: List[Dict[str, str]] = []
+        self.dropped = 0                 # lines trimmed off the front, so indices stay absolute
+        self.cv = threading.Condition()
+        self.started_at: float | None = None
+        self.finished_at: float | None = None
+
+
+_RUNS: Dict[str, _EngineRun] = {
+    key: _EngineRun(key, cfg["label"]) for key, cfg in ENGINES.items()
+}
+
+
+def _engine_key(engine: str) -> str:
+    """Validate an ?engine= parameter, or raise a 422 that names the choices.
+
+    Defaults are applied by the endpoint signatures, so an empty value here is
+    a caller that sent something wrong rather than a caller that sent nothing.
+    """
+    key = (engine or DEFAULT_ENGINE).strip().lower()
+    if key not in ENGINES:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Unknown engine '{engine}'. Use one of: "
+                    f"{', '.join(ENGINES)}."),
+        )
+    return key
+
+
+def _run_for(engine: str) -> _EngineRun:
+    return _RUNS[_engine_key(engine)]
+
+
+def _cpsat_available() -> bool:
+    """Is Google OR-Tools installed?
+
+    find_spec rather than an import: importing ortools costs a second and pulls
+    in a large native extension, and this is called on every poll of the Run
+    page. A missing spec is the normal case on the customer's machine unless
+    they installed requirements-cpsat.txt.
+    """
+    try:
+        return importlib.util.find_spec("ortools") is not None
+    except (ImportError, ValueError):
+        # A half-installed or shadowed package raises here instead of returning
+        # None. Either way ortools cannot be used, which is what we report.
+        return False
+
+
+def _engine_available(key: str) -> tuple[bool, str]:
+    """(available, reason). The reason is shown to the user verbatim."""
+    if key != "cpsat":
+        return True, ""
+    if not (BASE_DIR / "main_cpsat.py").exists():
+        return False, "The CP-SAT engine (main_cpsat.py) is not installed alongside this server."
+    if not _cpsat_available():
+        return False, ("The CP-SAT engine needs Google OR-Tools, which is not installed. "
+                       "Install it with: pip install -r requirements-cpsat.txt")
+    return True, ""
 
 
 def _classify(text: str) -> str:
@@ -282,47 +384,95 @@ def _classify(text: str) -> str:
     return "info"
 
 
-def _emit(text: str) -> None:
-    global _dropped
-    with _transcript_cv:
-        _transcript.append({"text": text, "cls": _classify(text)})
-        if len(_transcript) > MAX_TRANSCRIPT_LINES:
-            excess = len(_transcript) - MAX_TRANSCRIPT_LINES
-            del _transcript[:excess]
-            _dropped += excess
-        _transcript_cv.notify_all()
+def _emit(run: _EngineRun, text: str) -> None:
+    with run.cv:
+        run.transcript.append({"text": text, "cls": _classify(text)})
+        if len(run.transcript) > MAX_TRANSCRIPT_LINES:
+            excess = len(run.transcript) - MAX_TRANSCRIPT_LINES
+            del run.transcript[:excess]
+            run.dropped += excess
+        run.cv.notify_all()
 
 
-def _set_state(state: str) -> None:
-    global _run_state
-    with _transcript_cv:
-        _run_state = state
-        _transcript_cv.notify_all()
+def _set_state(run: _EngineRun, state: str) -> None:
+    with run.cv:
+        run.state = state
+        run.cv.notify_all()
 
 
-class _QueueWriter(io.TextIOBase):
+class _StdoutRouter(io.TextIOBase):
+    """One sys.stdout that hands each thread's print() to that thread's engine.
+
+    The old code wrapped the worker in contextlib.redirect_stdout, which swaps a
+    PROCESS-global. With two engines running at once that is actively wrong: the
+    second run's redirect swallows the first run's output, and when the short
+    run exits it restores sys.stdout to whatever was installed when it started —
+    stomping on the long run still writing through it. The greedy engine
+    finishes in ~0.15 s and CP-SAT takes minutes, so this would have hit on
+    almost every overlapping pair.
+
+    Installed once, globally, and left in place. A thread with no engine bound
+    (uvicorn's own logging, the seeding code at import) falls through to the
+    real stdout unchanged.
+    """
+
+    _local = threading.local()
+    _installed = False
+    _install_lock = threading.Lock()
+
+    def __init__(self, real: Any) -> None:
+        self._real = real
+
+    @classmethod
+    def install(cls) -> None:
+        with cls._install_lock:
+            if not cls._installed:
+                sys.stdout = cls(sys.stdout)
+                cls._installed = True
+
+    @classmethod
+    def bind(cls, run: _EngineRun | None) -> None:
+        cls._local.run = run
+
     def write(self, s: str) -> int:
+        run = getattr(self._local, "run", None)
+        if run is None:
+            return self._real.write(s)
         if s and s.strip():
-            _emit(s.strip().replace("\n", " "))
+            _emit(run, s.strip().replace("\n", " "))
         return len(s)
 
     def flush(self) -> None:
-        pass
+        if getattr(self._local, "run", None) is None:
+            self._real.flush()
 
 
-def _worker() -> None:
-    global _busy
-    writer = _QueueWriter()
+def _entry_point(key: str):
+    """Resolve an engine key to its callable, importing CP-SAT only on demand.
+
+    main_cpsat is imported here and not at module scope on purpose: it is an
+    optional component, and an install without it (or without ortools) must
+    still be able to run the greedy engine.
+    """
+    if key == "greedy":
+        return _run
+    import main_cpsat                                   # noqa: PLC0415
+    return main_cpsat._run
+
+
+def _worker(run: _EngineRun) -> None:
+    _StdoutRouter.bind(run)
     crashed = False
-    with contextlib.redirect_stdout(writer):
-        try:
-            _run()
-        except Exception as exc:
-            crashed = True
-            _emit(f"[ERROR] Scheduler crashed: {exc}")
-        finally:
-            _busy = False
-            _set_state("error" if crashed else "done")
+    try:
+        _entry_point(run.key)()
+    except Exception as exc:
+        crashed = True
+        _emit(run, f"[ERROR] {run.label} scheduler crashed: {exc}")
+    finally:
+        _StdoutRouter.bind(None)
+        run.busy = False
+        run.finished_at = time.time()
+        _set_state(run, "error" if crashed else "done")
 
 
 # ── Excel / CSV parsing ───────────────────────────────────────────────────────
@@ -565,80 +715,153 @@ async def upload_data(slug: str, file: UploadFile = File(...)):
 
 
 # ── Scheduler endpoints ───────────────────────────────────────────────────────
+# Every one of these takes ?engine=, defaulting to greedy so that a client
+# written before the second engine existed (and the bookmarked URLs the dean
+# already has) keeps behaving exactly as it did.
+
+@app.get("/api/engines")
+def list_engines():
+    """What the Run and Schedule pages need to decide what to offer.
+
+    The UI uses `available` to grey out CP-SAT with a reason instead of letting
+    the user start a run that would die on an ImportError, `running` to show
+    "running…" against a source that is mid-solve, and `has_output` to label a
+    source that has never been generated.
+    """
+    out = {}
+    for key, cfg in ENGINES.items():
+        run = _RUNS[key]
+        available, reason = _engine_available(key)
+        with run.cv:
+            state, busy = run.state, run.busy
+            started, finished = run.started_at, run.finished_at
+        out[key] = {
+            "label": cfg["label"],
+            "available": available,
+            "reason": reason,
+            "running": busy,
+            "state": state,
+            "has_output": (BASE_DIR / cfg["json"]).exists(),
+            "elapsed": _elapsed(started, finished, busy),
+            "time_limit": CPSAT_TIME_LIMIT_S if key == "cpsat" else None,
+        }
+    return {"engines": out, "default": DEFAULT_ENGINE}
+
+
+def _elapsed(started: float | None, finished: float | None, busy: bool) -> float | None:
+    """Seconds this engine has been running, or took. None if it never ran.
+
+    Computed server-side so the CP-SAT wall clock is right even on a page that
+    was opened halfway through a solve — the browser has no idea when the run
+    it is watching actually started.
+    """
+    if started is None:
+        return None
+    end = time.time() if busy or finished is None else finished
+    return round(end - started, 1)
+
 
 @app.post("/api/run")
-def start_run():
-    global _busy, _dropped
-    if _busy:
-        raise HTTPException(status_code=409, detail="Scheduler already running")
-    _busy = True
-    # A new run replaces the previous transcript. Indices restart at 0, which is
-    # why the client re-reads /api/run/log after starting rather than assuming
-    # its old cursor is still valid.
-    with _transcript_cv:
-        _transcript.clear()
-        _dropped = 0
-    _set_state("running")
-    threading.Thread(target=_worker, daemon=True).start()
-    return {"status": "started"}
+def start_run(engine: str = DEFAULT_ENGINE):
+    key = _engine_key(engine)
+    run = _RUNS[key]
+    # Availability is checked BEFORE the thread starts, so an install without
+    # ortools gets one clear sentence naming requirements-cpsat.txt instead of
+    # an ImportError traceback buried in the console of a run that "started".
+    available, reason = _engine_available(key)
+    if not available:
+        raise HTTPException(status_code=503, detail=reason)
+    # Only the SAME engine conflicts. Running CP-SAT while the greedy engine
+    # runs is the point of splitting this state up, so it must not 409.
+    if run.busy:
+        raise HTTPException(
+            status_code=409,
+            detail=f"The {run.label} scheduler is already running.",
+        )
+    run.busy = True
+    # A new run replaces the previous transcript for THIS engine only. Indices
+    # restart at 0, which is why the client re-reads /api/run/log after starting
+    # rather than assuming its old cursor is still valid.
+    with run.cv:
+        run.transcript.clear()
+        run.dropped = 0
+    run.started_at = time.time()
+    run.finished_at = None
+    _set_state(run, "running")
+    # Install before the worker starts rather than at import: uvicorn and the
+    # tests both own stdout at import time, and there is nothing to route until
+    # the first run exists.
+    _StdoutRouter.install()
+    threading.Thread(target=_worker, args=(run,), daemon=True).start()
+    return {"status": "started", "engine": key}
 
 
 @app.get("/api/run/status")
-def run_status():
-    with _transcript_cv:
-        return {"running": _busy, "state": _run_state,
-                "lines": _dropped + len(_transcript)}
+def run_status(engine: str = DEFAULT_ENGINE):
+    run = _run_for(engine)
+    with run.cv:
+        return {"engine": run.key, "running": run.busy, "state": run.state,
+                "lines": run.dropped + len(run.transcript),
+                "elapsed": _elapsed(run.started_at, run.finished_at, run.busy),
+                "time_limit": CPSAT_TIME_LIMIT_S if run.key == "cpsat" else None}
 
 
 @app.get("/api/run/log")
-def run_log():
-    """The whole transcript of the current or most recent run.
+def run_log(engine: str = DEFAULT_ENGINE):
+    """The whole transcript of this engine's current or most recent run.
 
-    The Run page calls this on load so the console survives navigating away and
+    The Run page calls this on load so each console survives navigating away and
     back, then follows the live stream from `next` if the run is still going.
     """
-    with _transcript_cv:
+    run = _run_for(engine)
+    with run.cv:
         return {
-            "lines": list(_transcript),
-            "start": _dropped,
-            "next": _dropped + len(_transcript),
-            "running": _busy,
-            "state": _run_state,
+            "engine": run.key,
+            "lines": list(run.transcript),
+            "start": run.dropped,
+            "next": run.dropped + len(run.transcript),
+            "running": run.busy,
+            "state": run.state,
+            "elapsed": _elapsed(run.started_at, run.finished_at, run.busy),
+            "time_limit": CPSAT_TIME_LIMIT_S if run.key == "cpsat" else None,
         }
 
 
-def _wait_for_lines(idx: int) -> tuple:
-    """Block until there is output at or after `idx`, or the run has finished.
+def _wait_for_lines(run: _EngineRun, idx: int) -> tuple:
+    """Block until this engine has output at or after `idx`, or its run ended.
 
     Returns (lines, next_index, finished). The one-second wait timeout lets the
     loop re-check the run state so a stream opened just as a run ends still
     terminates promptly instead of hanging on the condition.
     """
-    with _transcript_cv:
+    with run.cv:
         while True:
-            if idx < _dropped:          # client fell behind the trim window
-                idx = _dropped
-            available = _dropped + len(_transcript)
+            if idx < run.dropped:       # client fell behind the trim window
+                idx = run.dropped
+            available = run.dropped + len(run.transcript)
             if idx < available:
-                return list(_transcript[idx - _dropped:]), available, False
-            if _run_state != "running":
+                return list(run.transcript[idx - run.dropped:]), available, False
+            if run.state != "running":
                 return [], idx, True
-            _transcript_cv.wait(timeout=1.0)
+            run.cv.wait(timeout=1.0)
 
 
 @app.get("/api/run/stream")
-async def run_stream(since: int = 0):
-    """Server-sent events for a run, resuming from `since`.
+async def run_stream(since: int = 0, engine: str = DEFAULT_ENGINE):
+    """Server-sent events for one engine's run, resuming from `since`.
 
     Serving from an index instead of draining a queue is what makes the console
     recoverable: reconnecting replays nothing the client already has and skips
     nothing it missed.
     """
+    run = _run_for(engine)
+
     async def generator():
         idx = since
         loop = asyncio.get_event_loop()
         while True:
-            lines, idx, finished = await loop.run_in_executor(None, _wait_for_lines, idx)
+            lines, idx, finished = await loop.run_in_executor(
+                None, _wait_for_lines, run, idx)
             for item in lines:
                 cls, text = item["cls"], item["text"]
                 if cls == "info":
@@ -658,50 +881,67 @@ async def run_stream(since: int = 0):
 
 # ── Schedule output endpoints ─────────────────────────────────────────────────
 
+def _output_path(key: str, kind: str) -> Path:
+    """Path to one of an engine's output files, or a 404 the user can act on.
+
+    A missing file here is the ordinary "you haven't run this one yet" case, not
+    a server fault, so it must never surface as a 500 — and the message has to
+    say WHICH engine is missing, because with two sources on screen "no schedule
+    yet" is ambiguous.
+    """
+    cfg = ENGINES[key]
+    path = BASE_DIR / cfg[kind]
+    if path.exists():
+        return path
+    if key == "cpsat":
+        raise HTTPException(
+            status_code=404,
+            detail=("The CP-SAT schedule has not been generated yet — "
+                    "run it from the Run tab."),
+        )
+    raise HTTPException(
+        status_code=404,
+        detail="No schedule has been generated yet. Run the scheduler first.",
+    )
+
+
 @app.get("/api/schedule")
-def get_schedule():
-    path = BASE_DIR / "schedule.json"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="No schedule yet — run the scheduler first")
-    with open(path) as f:
+def get_schedule(engine: str = DEFAULT_ENGINE):
+    key = _engine_key(engine)
+    with open(_output_path(key, "json"), encoding="utf-8") as f:
         return json.load(f)
 
 
 @app.get("/api/schedule/csv")
-def get_schedule_csv(format: str = "simple"):
-    """Download the schedule as CSV.
+def get_schedule_csv(format: str = "simple", engine: str = DEFAULT_ENGINE):
+    """Download the selected engine's schedule as CSV.
 
     format=simple (default) → Course/Type/Days/Times/Faculty, the compact layout
     format=banner           → the wide Banner-style import sheet
     Served as an attachment so the browser opens its save dialog rather than
-    rendering the CSV in the tab.
+    rendering the CSV in the tab. The filename carries the engine name so two
+    downloads in the same folder cannot be mistaken for each other.
     """
     if format not in ("simple", "banner"):
         raise HTTPException(
             status_code=422,
             detail=f"Unknown format '{format}'. Use 'simple' or 'banner'.",
         )
-    filename = "schedule_simple.csv" if format == "simple" else "schedule.csv"
-    path = BASE_DIR / filename
-    if not path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="No schedule has been generated yet. Run the scheduler first.",
-        )
+    key = _engine_key(engine)
+    path = _output_path(key, "simple" if format == "simple" else "banner")
     return FileResponse(
         str(path),
         media_type="text/csv",
-        filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        filename=path.name,
+        headers={"Content-Disposition": f'attachment; filename="{path.name}"'},
     )
 
 
 @app.get("/api/schedule/csv/legacy")
-def get_schedule_csv_legacy():
-    path = BASE_DIR / "schedule.csv"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="No schedule CSV yet")
-    return FileResponse(str(path), media_type="text/csv", filename="schedule.csv")
+def get_schedule_csv_legacy(engine: str = DEFAULT_ENGINE):
+    key = _engine_key(engine)
+    path = _output_path(key, "banner")
+    return FileResponse(str(path), media_type="text/csv", filename=path.name)
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
