@@ -5,7 +5,6 @@ import csv
 import io
 import json
 import os
-import queue
 import shutil
 import sys
 import tempfile
@@ -249,14 +248,62 @@ def _require_file(slug: str) -> Path:
 
 
 # ── Scheduler state ───────────────────────────────────────────────────────────
+# The run output is kept here rather than only pushed down the SSE stream.
+#
+# Two reasons. The Run tab is a separate page, so navigating to Inputs or
+# Schedule destroys its DOM and the console came back empty — the user lost a
+# report they had just waited for. And because the stream used a queue that was
+# consumed as it was read, a browser that reconnected part-way through a run
+# only ever saw the lines printed *after* it reconnected; everything earlier was
+# gone. Keeping the transcript server-side fixes both: any client can ask for
+# the whole run so far and then follow along from that point.
 _busy = False
-_q: "queue.Queue[str | None]" = queue.Queue()
+_run_state = "idle"          # idle | running | done | error
+_transcript: List[Dict[str, str]] = []
+_dropped = 0                 # lines trimmed off the front, so indices stay absolute
+_transcript_cv = threading.Condition()
+
+# A full run prints a few hundred lines. The cap only exists so a pathological
+# run cannot grow the process without bound; it is far above normal output.
+MAX_TRANSCRIPT_LINES = 20000
+
+
+def _classify(text: str) -> str:
+    """Severity class for one output line. Lives here rather than in the stream
+    generator so the stored transcript and the live stream always agree."""
+    if "[WARN]" in text:
+        return "warn"
+    if "[CRITICAL]" in text or "[ERROR]" in text:
+        return "critical"
+    if "✓ PASS" in text or ("PASS" in text and "✗" not in text):
+        return "pass"
+    if "✗ FAIL" in text or ("FAIL" in text and "✓" not in text):
+        return "fail"
+    return "info"
+
+
+def _emit(text: str) -> None:
+    global _dropped
+    with _transcript_cv:
+        _transcript.append({"text": text, "cls": _classify(text)})
+        if len(_transcript) > MAX_TRANSCRIPT_LINES:
+            excess = len(_transcript) - MAX_TRANSCRIPT_LINES
+            del _transcript[:excess]
+            _dropped += excess
+        _transcript_cv.notify_all()
+
+
+def _set_state(state: str) -> None:
+    global _run_state
+    with _transcript_cv:
+        _run_state = state
+        _transcript_cv.notify_all()
 
 
 class _QueueWriter(io.TextIOBase):
     def write(self, s: str) -> int:
         if s and s.strip():
-            _q.put(s)
+            _emit(s.strip().replace("\n", " "))
         return len(s)
 
     def flush(self) -> None:
@@ -266,14 +313,16 @@ class _QueueWriter(io.TextIOBase):
 def _worker() -> None:
     global _busy
     writer = _QueueWriter()
+    crashed = False
     with contextlib.redirect_stdout(writer):
         try:
             _run()
         except Exception as exc:
-            _q.put(f"[ERROR] Scheduler crashed: {exc}\n")
+            crashed = True
+            _emit(f"[ERROR] Scheduler crashed: {exc}")
         finally:
             _busy = False
-            _q.put(None)
+            _set_state("error" if crashed else "done")
 
 
 # ── Excel / CSV parsing ───────────────────────────────────────────────────────
@@ -519,40 +568,86 @@ async def upload_data(slug: str, file: UploadFile = File(...)):
 
 @app.post("/api/run")
 def start_run():
-    global _busy, _q
+    global _busy, _dropped
     if _busy:
         raise HTTPException(status_code=409, detail="Scheduler already running")
     _busy = True
-    _q = queue.Queue()
+    # A new run replaces the previous transcript. Indices restart at 0, which is
+    # why the client re-reads /api/run/log after starting rather than assuming
+    # its old cursor is still valid.
+    with _transcript_cv:
+        _transcript.clear()
+        _dropped = 0
+    _set_state("running")
     threading.Thread(target=_worker, daemon=True).start()
     return {"status": "started"}
 
 
 @app.get("/api/run/status")
 def run_status():
-    return {"running": _busy}
+    with _transcript_cv:
+        return {"running": _busy, "state": _run_state,
+                "lines": _dropped + len(_transcript)}
+
+
+@app.get("/api/run/log")
+def run_log():
+    """The whole transcript of the current or most recent run.
+
+    The Run page calls this on load so the console survives navigating away and
+    back, then follows the live stream from `next` if the run is still going.
+    """
+    with _transcript_cv:
+        return {
+            "lines": list(_transcript),
+            "start": _dropped,
+            "next": _dropped + len(_transcript),
+            "running": _busy,
+            "state": _run_state,
+        }
+
+
+def _wait_for_lines(idx: int) -> tuple:
+    """Block until there is output at or after `idx`, or the run has finished.
+
+    Returns (lines, next_index, finished). The one-second wait timeout lets the
+    loop re-check the run state so a stream opened just as a run ends still
+    terminates promptly instead of hanging on the condition.
+    """
+    with _transcript_cv:
+        while True:
+            if idx < _dropped:          # client fell behind the trim window
+                idx = _dropped
+            available = _dropped + len(_transcript)
+            if idx < available:
+                return list(_transcript[idx - _dropped:]), available, False
+            if _run_state != "running":
+                return [], idx, True
+            _transcript_cv.wait(timeout=1.0)
 
 
 @app.get("/api/run/stream")
-async def run_stream():
+async def run_stream(since: int = 0):
+    """Server-sent events for a run, resuming from `since`.
+
+    Serving from an index instead of draining a queue is what makes the console
+    recoverable: reconnecting replays nothing the client already has and skips
+    nothing it missed.
+    """
     async def generator():
+        idx = since
         loop = asyncio.get_event_loop()
         while True:
-            line = await loop.run_in_executor(None, _q.get)
-            if line is None:
+            lines, idx, finished = await loop.run_in_executor(None, _wait_for_lines, idx)
+            for item in lines:
+                cls, text = item["cls"], item["text"]
+                if cls == "info":
+                    yield f"data: {text}\n\n"
+                else:
+                    yield f"event: {cls}\ndata: {text}\n\n"
+            if finished:
                 yield "data: __DONE__\n\n"
                 break
-            text = line.strip().replace("\n", " ")
-            if "[WARN]" in text:
-                yield f"event: warn\ndata: {text}\n\n"
-            elif "[CRITICAL]" in text or "[ERROR]" in text:
-                yield f"event: critical\ndata: {text}\n\n"
-            elif "✓ PASS" in text or ("PASS" in text and "✗" not in text):
-                yield f"event: pass\ndata: {text}\n\n"
-            elif "✗ FAIL" in text or ("FAIL" in text and "✓" not in text):
-                yield f"event: fail\ndata: {text}\n\n"
-            else:
-                yield f"data: {text}\n\n"
 
     return StreamingResponse(
         generator(),

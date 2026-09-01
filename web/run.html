@@ -99,6 +99,9 @@
 <script>
 let _source = null;
 let _running = false;
+// How many transcript lines this page has already rendered. The stream resumes
+// from here, so reconnecting never duplicates or skips output.
+let _cursor = 0;
 
 async function startRun() {
   if (_running) return;
@@ -114,12 +117,14 @@ async function startRun() {
     return;
   }
 
+  // A new run resets the server-side transcript to index 0.
+  _cursor = 0;
   setRunning(true);
   connectStream();
 }
 
 function connectStream() {
-  _source = new EventSource('/api/run/stream');
+  _source = new EventSource('/api/run/stream?since=' + _cursor);
 
   _source.onmessage = (e) => {
     if (e.data === '__DONE__') {
@@ -129,13 +134,11 @@ function connectStream() {
       document.getElementById('downloads').classList.add('show');
       return;
     }
-    log(e.data, classifyLine(e.data));
+    logServer(e.data, classifyLine(e.data));
   };
 
-  _source.addEventListener('warn',     (e) => log(e.data, 'warn'));
-  _source.addEventListener('critical', (e) => log(e.data, 'critical'));
-  _source.addEventListener('pass',     (e) => log(e.data, 'pass'));
-  _source.addEventListener('fail',     (e) => log(e.data, 'fail'));
+  ['warn', 'critical', 'pass', 'fail'].forEach(kind =>
+    _source.addEventListener(kind, (e) => logServer(e.data, kind)));
 
   _source.onerror = () => {
     if (!_running) return;
@@ -163,6 +166,14 @@ function log(text, cls) {
   el.scrollTop = el.scrollHeight;
 }
 
+/* A line that came from the server transcript. Only these advance the cursor —
+ * local notices like "Reconnecting…" are not part of the transcript, and
+ * counting them would make the stream resume at the wrong place. */
+function logServer(text, cls) {
+  log(text, cls);
+  _cursor++;
+}
+
 function clearLog() {
   document.getElementById('log').innerHTML = '<span class="log-empty">Starting…</span>';
 }
@@ -179,13 +190,23 @@ function setBadge(state) {
   b.textContent = { idle: 'Idle', running: 'Running…', done: 'Complete ✓', error: 'Error ✗' }[state];
 }
 
-// On load: check if scheduler is already running and reconnect
-fetch('/api/run/status').then(r => r.json()).then(({ running }) => {
-  if (running) {
+/* On load, replay the transcript of the current or most recent run, then follow
+ * along if it is still going. This is what makes the console survive leaving the
+ * Run tab: the output lives on the server, not in this page. */
+fetch('/api/run/log').then(r => r.json()).then(({ lines, next, running, state }) => {
+  if (lines.length) {
     clearLog();
-    log('Reconnecting to running scheduler…', 'info');
+    lines.forEach(l => log(l.text, l.cls));
+    _cursor = next;
+  }
+  if (running) {
     setRunning(true);
     connectStream();
+  } else if (state === 'done') {
+    setBadge('done');
+    document.getElementById('downloads').classList.add('show');
+  } else if (state === 'error') {
+    setBadge('error');
   }
 }).catch(() => {});
 </script>
