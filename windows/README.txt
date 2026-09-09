@@ -55,13 +55,26 @@ Two schedulers:
     start CP-SAT and keep reading, viewing and exporting the greedy schedule
     while it works. The Schedule page has a dropdown to pick which one you
     are looking at.
-  - CP-SAT is not seeded on purpose: running it again gives you a different
-    valid timetable, so you can generate a few and pick one.
-  - CP-SAT needs one extra package (ortools). install.bat installs it, but if
-    that fails - it is large, and some networks block it - the rest of the app
-    is unaffected and the Run page will say CP-SAT is unavailable. To add it
-    later, run this from the course-scheduler folder:
+  - By default CP-SAT gives you a DIFFERENT valid timetable every time you run
+    it, so you can generate a few and pick the one you like. Untick "Vary the
+    schedule each run" on the Run page to turn that off: the same inputs then
+    always produce the same schedule, which is what you want when you are
+    comparing two sets of inputs or reproducing a schedule you already sent
+    someone. That mode is slower - several minutes rather than under one.
+  - CP-SAT runs on a package called ortools, which install.bat installs for
+    you. It is required, not optional: if it cannot be installed the installer
+    stops and tells you why, rather than leaving you with half an app. It is a
+    large download (about 100 MB) and some work networks block it, so if the
+    install fails on this step, the log file names the two addresses to ask IT
+    to allow (pypi.org and files.pythonhosted.org). Running the installer once
+    on a phone hotspot also works.
+  - If the Run page ever says CP-SAT is unavailable, the install is damaged.
+    Re-run install.bat to repair it. To patch it in place instead, run this
+    from the course-scheduler folder:
         venv\Scripts\python.exe -m pip install -r requirements-cpsat.txt
+  - ortools is 64-bit only, and needs Python 3.9 or newer. install.bat checks
+    for that and installs its own 64-bit Python 3.12 if this computer's Python
+    is not suitable.
 
 Running the scheduler:
   - Double-click the "WIT Class Scheduler" shortcut on your Desktop

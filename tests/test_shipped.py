@@ -59,13 +59,42 @@ class ShippedDataRuns(unittest.TestCase):
 
 class ShippedDataFiles(unittest.TestCase):
     def test_settings_names_are_all_recognised(self):
+        """Every shipped setting must be acted on by one of the two engines.
+
+        settings.csv is a single file shared by both, so a name only the CP-SAT
+        engine knows is legitimate. It still has to be known SOMEWHERE — the
+        point of this test is to catch a typo shipped in the default data, and a
+        typo looks exactly like a key neither engine reads.
+        """
         import csv
         import main
+        import main_cpsat
         with open(REPO / "data" / "settings.csv", newline="", encoding="utf-8-sig") as f:
             names = [r["setting"].strip() for r in csv.DictReader(f) if r.get("setting")]
         self.assertTrue(names)
-        unknown = [n for n in names if n not in main.SETTING_DEFAULTS]
+        known = set(main.SETTING_DEFAULTS) | set(main_cpsat.SETTING_DEFAULTS)
+        unknown = [n for n in names if n not in known]
         self.assertEqual(unknown, [], msg=f"unknown settings shipped: {unknown}")
+
+    def test_foreign_settings_are_real_cpsat_settings(self):
+        """main.FOREIGN_SETTINGS suppresses the greedy engine's unknown-setting
+        warning. If a name in it is not actually a CP-SAT setting, it is
+        suppressing a warning about a genuine typo — the exact thing the warning
+        exists to catch."""
+        import main
+        import main_cpsat
+        bogus = sorted(set(main.FOREIGN_SETTINGS) - set(main_cpsat.SETTING_DEFAULTS))
+        self.assertEqual(bogus, [], msg=f"not CP-SAT settings: {bogus}")
+
+    def test_engines_do_not_both_claim_the_same_setting_differently(self):
+        """A key both engines define must mean the same thing in both, or the
+        two schedulers silently disagree about the user's own settings file."""
+        import main
+        import main_cpsat
+        shared = set(main.SETTING_DEFAULTS) & set(main_cpsat.SETTING_DEFAULTS)
+        mismatched = sorted(k for k in shared
+                            if main.SETTING_DEFAULTS[k] != main_cpsat.SETTING_DEFAULTS[k])
+        self.assertEqual(mismatched, [], msg=f"defaults differ: {mismatched}")
 
     def test_meeting_patterns_cover_two_three_and_four_day_courses(self):
         import main

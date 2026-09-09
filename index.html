@@ -2716,12 +2716,29 @@
             },
         };
 
-        // Greedy is the default, as it has always been. ?source=cpsat is what the
-        // Run page's per-engine "View Schedule" links use.
+        /* The nav links are real page loads, so without this the picker would
+         * reset to Greedy every time you visited Run and came back — silently
+         * putting a different engine's schedule on screen than the one you were
+         * last looking at. Remembered per browser, like the Run tab's toggle.
+         * Precedence: an explicit ?source= wins (it is the Run page's own "View
+         * Schedule" link, and an explicit click must beat a stale memory), then
+         * what you last had open, then Greedy as it has always been. */
+        const SOURCE_STORE = 'schedule-source';
+
+        function rememberSource() {
+            try { localStorage.setItem(SOURCE_STORE, SCHEDULE_SOURCE); } catch (e) { /* private mode */ }
+        }
+
         let SCHEDULE_SOURCE = 'greedy';
         (function () {
             const q = new URLSearchParams(window.location.search).get('source');
-            if (q && SOURCES[q]) SCHEDULE_SOURCE = q;
+            // An explicit link is a choice too, so it becomes the new memory —
+            // otherwise clicking "View CP-SAT Schedule" on the Run page, then
+            // stepping through Inputs, would drop you back on the old engine.
+            if (q && SOURCES[q]) { SCHEDULE_SOURCE = q; rememberSource(); return; }
+            let saved = null;
+            try { saved = localStorage.getItem(SOURCE_STORE); } catch (e) { /* private mode */ }
+            if (saved && SOURCES[saved]) SCHEDULE_SOURCE = saved;
         })();
 
         const sourceSelect = document.getElementById('sourceSelect');
@@ -2767,6 +2784,7 @@
                 const wanted = sourceSelect.value;
                 if (wanted === SCHEDULE_SOURCE) return;
                 SCHEDULE_SOURCE = wanted;
+                rememberSource();
                 paintSourceChrome();
                 await loadScheduleFor(SCHEDULE_SOURCE, { keepView: true });
             });
@@ -2812,6 +2830,9 @@
                 // dead end otherwise. Fall back rather than showing an empty
                 // board, but only after saying why.
                 SCHEDULE_SOURCE = 'greedy';
+                // Forget the stored choice too, or a CP-SAT run that was never
+                // generated would re-fail and re-toast on every single visit.
+                rememberSource();
                 paintSourceChrome();
                 await loadScheduleFor(SCHEDULE_SOURCE);
             }

@@ -1,9 +1,25 @@
-# Extra dependency for the CP-SAT engine (main_cpsat.py) only.
-# main.py — the greedy engine — must keep running on a machine without this
-# installed, which is why ortools is imported lazily inside build_schedule_cpsat
-# and is NOT added to requirements.txt.
+# The CP-SAT engine's solver. REQUIRED - not an optional extra.
+#
+# CP-SAT (main_cpsat.py) is one of the two schedulers the product ships with,
+# so an install without ortools is a broken install, and windows/install.bat
+# fails loudly rather than finishing without it.
+#
+# It is kept out of requirements.txt anyway, for two reasons:
+#  * it is a ~100 MB binary wheel and by far the most likely package to be
+#    refused by a locked-down network, and it needs its own retry ladder in
+#    the installer;
+#  * one blocked download must not also take fastapi and the rest of the app
+#    with it, leaving nothing for those retries to run on top of.
+# main.py, the greedy engine, still does not import ortools at all, which is
+# why the import in main_cpsat.py is lazy.
+#
+# Repair an install that is missing it with:
 #
 #     python3 -m pip install -r requirements-cpsat.txt
+#
+# ortools ships win_amd64 wheels only (CPython 3.9-3.13, and 3.14 from 9.15)
+# and publishes no source tarball, so a 32-bit or too-new Python cannot run
+# CP-SAT at all. install.bat checks for that before it gets here.
 #
 # Pinned to the 9.x line: the cp_model Python API (NewOptionalIntervalVar,
 # AddCumulative, AddNoOverlap, absolute_gap_limit) is stable across 9.x, and a

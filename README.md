@@ -130,8 +130,10 @@ every step yourself.
 
 4. **Install the required packages:**
    ```
-   python -m pip install -r requirements.txt
+   python -m pip install -r requirements.txt -r requirements-cpsat.txt
    ```
+   Both files are required. The second one is the solver the CP-SAT
+   scheduler runs on; it is a large download, so give it a minute.
    If `python` isn't recognized, try `py` instead of `python` in this and
    the next step.
 
@@ -173,6 +175,13 @@ Once installed (either option above), start the app:
    run button. Progress is streamed live, including warnings (`[WARN]`)
    and any hard failures (`[ERROR]`/`[CRITICAL]`) so you can see exactly
    what the scheduler did.
+
+   There are two engines. The **greedy** one finishes in under a second and
+   always returns the same schedule for the same inputs. The **CP-SAT** one
+   takes longer but usually places more sections, and by default returns a
+   *different* valid schedule every time, so you can run it a few times and
+   pick. Untick **"Vary the schedule each run"** on its card to turn that off
+   and get the same schedule every time — slower, but repeatable.
 3. **View the schedule.** Once a run finishes, go to the schedule view to
    browse the result by Day, Professor, Room, or Section.
 4. **Export results.** The generated `schedule.csv` and `schedule.json` are

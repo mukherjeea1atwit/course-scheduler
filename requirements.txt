@@ -1,3 +1,9 @@
+# Core requirements. The CP-SAT engine's solver is required too, but lives in
+# requirements-cpsat.txt so a blocked download of that one large binary wheel
+# cannot take the rest of the app down with it - install both:
+#
+#     python3 -m pip install -r requirements.txt -r requirements-cpsat.txt
+#
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9

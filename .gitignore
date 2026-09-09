@@ -1,6 +1,11 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# The Windows installer builds its virtual environment inside the checkout
+# (%APP_DIR%\venv), and the manual install in README.md does the same.
+venv/
+.venv/
 business/
 
 # Generated schedule output — regenerated on every run, never hand-edited
@@ -8,6 +13,10 @@ schedule.json
 schedule.csv
 schedule_simple.csv
 result.txt
+schedule_cpsat.json
+schedule_cpsat.csv
+schedule_cpsat_simple.csv
+result_cpsat.txt
 
 # Working notes and test data received from users (not part of the app)
 FARMER_FEEDBACK_TRIAGE.md

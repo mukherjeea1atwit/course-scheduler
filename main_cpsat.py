@@ -534,6 +534,11 @@ SETTING_DEFAULTS: Dict[str, object] = {
     "max_teaching_days": 4,
     "default_faculty_load": 3,
     "am_target_ratio": 0.60,
+    # 1 = every run returns a different, equally optimal schedule (the shipped
+    # behaviour); 0 = the same inputs always produce the same schedule. CP-SAT
+    # only — the greedy engine is deterministic either way, which is why
+    # main.py lists this key as foreign rather than acting on it.
+    "cpsat_randomize": 1,
 }
 
 
@@ -546,7 +551,7 @@ def load_settings(path: str) -> Dict[str, str]:
     screen no longer matches the number in force.
     """
     global MAX_CONCURRENT, MAX_DAY_SPAN_HR, FACULTY_GAP_MIN, AM_TARGET_RATIO
-    global MAX_TEACHING_DAYS, DEFAULT_FACULTY_LOAD
+    global MAX_TEACHING_DAYS, DEFAULT_FACULTY_LOAD, CPSAT_RANDOMIZE
 
     MAX_CONCURRENT       = int(SETTING_DEFAULTS["max_concurrent_sections"])
     MAX_DAY_SPAN_HR      = int(SETTING_DEFAULTS["max_daily_span_hours"])
@@ -554,6 +559,7 @@ def load_settings(path: str) -> Dict[str, str]:
     MAX_TEACHING_DAYS    = int(SETTING_DEFAULTS["max_teaching_days"])
     DEFAULT_FACULTY_LOAD = int(SETTING_DEFAULTS["default_faculty_load"])
     AM_TARGET_RATIO      = float(SETTING_DEFAULTS["am_target_ratio"])
+    CPSAT_RANDOMIZE      = bool(SETTING_DEFAULTS["cpsat_randomize"])
 
     out: Dict[str, str] = {}
     if not os.path.exists(path):
@@ -591,6 +597,11 @@ def load_settings(path: str) -> Dict[str, str]:
     MAX_TEACHING_DAYS    = _num("max_teaching_days", int, 1, len(ALL_DAYS), MAX_TEACHING_DAYS)
     DEFAULT_FACULTY_LOAD = _num("default_faculty_load", int, 0, 20, DEFAULT_FACULTY_LOAD)
     AM_TARGET_RATIO      = _num("am_target_ratio", float, 0.0, 1.0, AM_TARGET_RATIO)
+    # Carried through _num as a 0/1 integer rather than parsing "true"/"yes"/…:
+    # the Settings tab is a plain CSV table, and one spelling that works beats
+    # five that might. A value outside 0–1 is rejected by _num with a warning.
+    CPSAT_RANDOMIZE      = bool(_num("cpsat_randomize", int, 0, 1,
+                                     int(CPSAT_RANDOMIZE)))
     return out
 
 
@@ -1019,16 +1030,75 @@ class TimeSlotScheduler:
 # solution is USED and the console says so.
 CPSAT_TIME_LIMIT_S = 480.0
 
-# Eight parallel workers, and no random_seed anywhere in this file. The customer
-# wants a different valid schedule from one run to the next, so run-to-run
-# variation is a FEATURE here, not a bug to be pinned down.
+# Eight parallel workers. With randomization ON this is also a source of
+# variation in its own right: the workers race on wall clock, so which one wins
+# is timing-dependent. See CPSAT_RANDOMIZE below.
 CPSAT_WORKERS = 8
 
-# Shuffle the order in which sections and their candidate placements are declared
-# to the model. CP-SAT's search follows declaration order, so this is what
-# actually produces a visibly different (and equally optimal) timetable on each
-# run. Set to False to get a byte-stable model for debugging.
-CPSAT_SHUFFLE_MODEL = True
+# THE RANDOMIZATION SWITCH.
+#
+# True (shipped default) — every run returns a DIFFERENT, equally optimal
+# timetable. That is deliberate: a scheduler that only ever emits one answer
+# hides the fact that dozens of equally good ones exist, and the customer wants
+# to re-run and pick. Two independent mechanisms produce the variety:
+#   1. the declaration order of sections and of their candidate placements is
+#      shuffled (CP-SAT's search follows the order variables were created), and
+#   2. the eight solver workers race, so the winning worker varies.
+#
+# False — the same inputs give the same schedule every time. The shuffles are
+# skipped and the solver is pinned (see the solver setup in
+# build_schedule_cpsat). Use this when you need to compare two runs, reproduce
+# a reported schedule, or hand someone a result they can regenerate.
+#
+# Overridden per run by the Run page's toggle and by the `cpsat_randomize` key
+# in data/settings.csv; see _run() for the precedence.
+CPSAT_RANDOMIZE = True
+
+# The seed used when CPSAT_RANDOMIZE is False. Any fixed value works — what
+# matters is only that it does not change between runs. Left as a named constant
+# rather than a literal so "which seed produced this?" has an answer.
+CPSAT_DETERMINISTIC_SEED = 1
+
+# The deterministic-mode budget, counted in CP-SAT's own work units rather than
+# seconds. Seconds cannot be used here: a limit measured in wall clock makes the
+# answer depend on how busy the machine was, which is exactly what deterministic
+# mode is for. Deliberately loose — the customer's data consumes 43.6 of these
+# units before the gap limit stops the search, so this budget has better than a
+# 2x margin and in practice never fires. Do not tighten it to save time: a run
+# that stops HERE stops early and returns a worse schedule, and unlike the wall
+# clock it would do so on every machine equally.
+CPSAT_DETERMINISTIC_TIME = 120.0
+
+# Wall-clock backstop used INSTEAD of CPSAT_TIME_LIMIT_S when randomization is
+# off. It has to be much larger, because deterministic mode is genuinely slower:
+# making the eight workers take turns instead of race costs three to six times
+# the wall clock on the customer's data (measured on one laptop: ~60 s racing,
+# 195 s idle / 380 s busy interleaved, all reaching the same optimum). At 480 s
+# a slower machine would hit the ceiling — and a run that stops on a WALL-CLOCK
+# limit is not reproducible, which is the one thing this mode exists to provide.
+# Half an hour is chosen to be an outcome nobody reaches rather than a budget
+# anybody spends; the deterministic budget above is what bounds the search, and
+# _warn_time_limit_broke_determinism says so out loud if this fires anyway.
+CPSAT_DETERMINISTIC_WALL_S = 1800.0
+
+
+def _warn_time_limit_broke_determinism() -> None:
+    """Say so when a deterministic run was cut short by the wall clock.
+
+    Deterministic mode's whole promise is "same inputs, same schedule". A run
+    that stops on a WALL-CLOCK limit stopped at a point that depends on how busy
+    the machine was, so re-running it may well produce something different. That
+    has to be said out loud: a promise that quietly does not hold is worse than
+    no promise, because the user's next move is to diff two runs and conclude
+    their inputs changed.
+    """
+    if CPSAT_RANDOMIZE:
+        return
+    print("  [WARN] Randomization is OFF, but this run stopped on the wall-clock "
+          "backstop rather than finishing its search. Stopping on the clock "
+          "depends on how busy the computer was, so THIS RESULT MAY NOT REPEAT. "
+          "The inputs are probably harder than the ones this mode was sized for "
+          "— re-run with randomization ON for a faster answer.")
 
 # Lab sessions are 1 h 45 min in the 3-2-4 offering. Module level (the greedy
 # engine had it nested inside build_schedule) because the model builder, the
@@ -1257,14 +1327,14 @@ def build_schedule_cpsat(
     # ── per-section variables ────────────────────────────────────────────────
     sms: List[_SecModel] = [_SecModel(s, timeslots) for s in sections]
 
-    # Declaration order is deliberately shuffled. CP-SAT explores in the order
-    # variables were created, so a different order yields a different — equally
-    # optimal — schedule on each run. The customer explicitly wants that variety;
-    # the alternative lever (solver.parameters.random_seed) is left untouched on
-    # purpose so the objective value stays reproducible even when the layout does
-    # not. Set CPSAT_SHUFFLE_MODEL = False to get a byte-stable model.
+    # Declaration order is shuffled when randomization is ON. CP-SAT explores in
+    # the order variables were created, so a different order yields a different —
+    # equally optimal — schedule on each run. This is the mechanism that actually
+    # produces the variety; the solver seed (set only in the deterministic path
+    # below) is the other half of the switch. With CPSAT_RANDOMIZE False the
+    # order stays the natural section order and the model is byte-stable.
     order = list(range(len(sms)))
-    if CPSAT_SHUFFLE_MODEL:
+    if CPSAT_RANDOMIZE:
         random.shuffle(order)
 
     all_faculty = sorted({f for f in faculty_limits if f != "TBA" and on_roster(f)})
@@ -1276,7 +1346,7 @@ def build_schedule_cpsat(
 
         # ── lecture placement: exactly one legal (pattern, slot), or the escape.
         combos = list(sm.combos)
-        if CPSAT_SHUFFLE_MODEL:
+        if CPSAT_RANDOMIZE:
             random.shuffle(combos)
         sm.combos = combos
         sm.sel = [model.NewBoolVar(f"sel[{sec.id}][{k}]") for k in range(len(combos))]
@@ -1297,7 +1367,7 @@ def build_schedule_cpsat(
         # ── lab placement (C9 different day, C10 one day, C17 same start) ─────
         if sm.lab_min > 0:
             lab_combos = list(sm.lab_combos)
-            if CPSAT_SHUFFLE_MODEL:
+            if CPSAT_RANDOMIZE:
                 random.shuffle(lab_combos)
             sm.lab_combos = lab_combos
             sm.lab_sel = [model.NewBoolVar(f"lab[{sec.id}][{k}]")
@@ -1718,12 +1788,20 @@ def build_schedule_cpsat(
     print(f"  foundation top-up opts : {len(topup_lits)}")
     print(f"  objective weights      : unplaced={W_UNPL:,} TBA={W_TBA:,} "
           f"top-up={W_TOPUP:,} load-shortfall={W_LOAD:,} soft≤{soft_ub:,}")
-    print(f"  time limit             : {CPSAT_TIME_LIMIT_S:.0f} s, "
-          f"{CPSAT_WORKERS} workers, no random_seed (varied output is intended)")
+    wall_limit = CPSAT_TIME_LIMIT_S if CPSAT_RANDOMIZE else CPSAT_DETERMINISTIC_WALL_S
+    print(f"  time limit             : {wall_limit:.0f} s, "
+          f"{CPSAT_WORKERS} workers")
+    print(f"  randomization          : "
+          + ("ON — this run's schedule will differ from the last one"
+             if CPSAT_RANDOMIZE else
+             f"OFF — same inputs give the same schedule (seed "
+             f"{CPSAT_DETERMINISTIC_SEED}); expect this to take several times "
+             f"longer than a randomized run"))
     sys.stdout.flush()
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = CPSAT_TIME_LIMIT_S
+    solver.parameters.max_time_in_seconds = (
+        CPSAT_TIME_LIMIT_S if CPSAT_RANDOMIZE else CPSAT_DETERMINISTIC_WALL_S)
     solver.parameters.num_workers = CPSAT_WORKERS
     # Stop once the remaining PROVABLE improvement is confined to the soft tier.
     # The tolerance is a tenth of the soft tier's own range, which is an order of
@@ -1743,9 +1821,31 @@ def build_schedule_cpsat(
     # is optimal WITHIN the tolerance, so the console says so explicitly rather
     # than claiming an exact optimum.
     solver.parameters.absolute_gap_limit = max(2.0, soft_ub / 10.0)
-    # random_seed is deliberately NOT set and the solver is deliberately NOT
-    # forced single-threaded: the customer wants a different valid schedule from
-    # one run to the next.
+
+    # ── The solver half of the randomization switch ──────────────────────────
+    # With randomization ON nothing is pinned: the eight workers race on wall
+    # clock, and whichever finds an optimum first is the one that answers. That
+    # is the second source of variety, on top of the shuffled declaration order.
+    #
+    # With it OFF, three things have to change together — any one of them alone
+    # leaves the result varying:
+    #   * random_seed, so the solver's own coin flips repeat. (CP-SAT defaults
+    #     to a fixed seed already; setting it explicitly means the guarantee
+    #     survives an ortools upgrade that changes the default.)
+    #   * interleave_search, which makes the workers take turns in a fixed order
+    #     instead of racing. Without it the answer depends on which core got
+    #     there first, which is not something a seed can control.
+    #   * max_deterministic_time, a limit counted in solver work units rather
+    #     than seconds. A wall-clock limit would reintroduce the problem it just
+    #     removed: hit it, and the answer depends on how fast the machine is.
+    #     The wall-clock ceiling above stays as a backstop so a pathological
+    #     dataset still cannot hang the Run page forever — if it ever fires, the
+    #     run is reported as time-limited and is NOT reproducible, which the
+    #     console says.
+    if not CPSAT_RANDOMIZE:
+        solver.parameters.random_seed = CPSAT_DETERMINISTIC_SEED
+        solver.parameters.interleave_search = True
+        solver.parameters.max_deterministic_time = CPSAT_DETERMINISTIC_TIME
     t_solve0 = time_mod.perf_counter()
     status = solver.Solve(model)
     solve_s = time_mod.perf_counter() - t_solve0
@@ -1754,6 +1854,14 @@ def build_schedule_cpsat(
     have_solution = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     print(f"  solver status          : {name}")
     print(f"  solve time             : {solve_s:.2f} s")
+    if not CPSAT_RANDOMIZE:
+        # In deterministic mode this, not the wall clock, is the number that
+        # matters: it is what the machine-independent budget is spent against,
+        # so it is the only way to tell whether CPSAT_DETERMINISTIC_TIME is
+        # comfortably loose or about to start truncating runs.
+        print(f"  deterministic time     : "
+              f"{solver.ResponseProto().deterministic_time:.1f} "
+              f"of {CPSAT_DETERMINISTIC_TIME:.0f} budgeted")
     if status == cp_model.OPTIMAL:
         # The tolerance has to be compared against the NET cost of one extra
         # unit of each tier, not against a raw weight. Comparing it to W_LOAD
@@ -1775,16 +1883,18 @@ def build_schedule_cpsat(
     elif status == cp_model.FEASIBLE:
         # The prototype conflated this with INFEASIBLE and told the user their
         # data was impossible when the solver had merely run out of clock.
-        print(f"  → TIME LIMIT ({CPSAT_TIME_LIMIT_S:.0f} s) reached with a feasible "
+        print(f"  → TIME LIMIT ({wall_limit:.0f} s) reached with a feasible "
               f"but UNPROVEN solution. That solution is being used; it satisfies "
               f"every hard constraint, it is simply not certified best-possible.")
         print(f"    best objective {solver.ObjectiveValue():.0f}, "
               f"best bound {solver.BestObjectiveBound():.0f}")
+        _warn_time_limit_broke_determinism()
     elif status == cp_model.UNKNOWN:
-        print(f"  → TIME LIMIT ({CPSAT_TIME_LIMIT_S:.0f} s) reached with NO solution "
+        print(f"  → TIME LIMIT ({wall_limit:.0f} s) reached with NO solution "
               f"found. This is NOT a proof that the inputs are impossible — the "
               f"search simply did not finish. Every section will be emitted as "
               f"UNPLACED so the run still produces a file you can work from.")
+        _warn_time_limit_broke_determinism()
     elif status == cp_model.INFEASIBLE:
         print("  → PROVEN INFEASIBLE: no assignment satisfies the hard constraints. "
               "Every section will be emitted as UNPLACED.")
@@ -1857,9 +1967,10 @@ def _materialise_cpsat(
             fac_grad_count[fac] = fac_grad_count.get(fac, 0) + delta
 
     # ── 1. commit everything the solver placed ───────────────────────────────
-    # Deterministic order so a room's preferred occupant does not depend on dict
-    # iteration order; the *schedule* still varies run to run, because the times
-    # and faculty it is derived from do.
+    # Sorted so a room's preferred occupant does not depend on dict iteration
+    # order. This step adds no variation of its own either way: with
+    # randomization ON the schedule still differs run to run, but only because
+    # the times and faculty it is derived from do.
     for sid in sorted(placement, key=lambda s: (by_id[s].sec.course_number, s)):
         sm = by_id[sid]
         sec = sm.sec
@@ -3044,13 +3155,25 @@ def print_summary(
 # ENTRY POINT
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _run() -> None:
+def _run(randomize: bool | None = None) -> None:
+    """Run the CP-SAT scheduler over data/ and write the three output files.
+
+    `randomize` is the per-run override for the Run page's toggle: None (the
+    default, and what the command line uses) means "whatever data/settings.csv
+    says". Passing True or False wins over the file for this run only and does
+    not edit it — the toggle is a thing you flip for one run, not a preference
+    that silently rewrites the user's settings behind their back.
+    """
     base = os.path.dirname(os.path.abspath(__file__))
     def dp(name: str) -> str:
         return os.path.join(base, "data", name)
 
-    global MEETING_RULES
+    global MEETING_RULES, CPSAT_RANDOMIZE
     load_settings(dp("settings.csv"))
+    # After load_settings, never before: that call resets CPSAT_RANDOMIZE to the
+    # file's value, so an override applied first would be thrown away.
+    if randomize is not None:
+        CPSAT_RANDOMIZE = bool(randomize)
     MEETING_RULES  = load_meeting_patterns(dp("meeting_patterns.csv"))
 
     courses        = load_courses(dp("course-list-Spring 27(Sheet1) (1).csv"))

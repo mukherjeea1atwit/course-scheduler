@@ -48,6 +48,16 @@
     .clock { font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; color: #374151; font-variant-numeric: tabular-nums; }
     .clock-max { color: #9ca3af; }
 
+    /* ── Per-run option ──
+       A checkbox in the actions bar rather than a row in the Settings tab: it
+       is something you flip for one run while deciding, not a policy you set
+       once. The hint below it carries the consequence, because "randomize" on
+       its own means nothing to a dean. */
+    .opt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #374151; cursor: pointer; user-select: none; }
+    .opt input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--wit-red); margin: 0; }
+    .opt:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+    .opt-hint { font-size: 12px; color: #6b7280; line-height: 1.5; margin: -6px 0 14px; }
+
     /* Why the Run button is disabled, when it is. */
     .unavailable { font-size: 12px; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 5px; padding: 7px 11px; margin-bottom: 12px; display: none; }
     .unavailable.show { display: block; }
@@ -141,10 +151,8 @@
       Solves the whole timetable at once with a constraint solver, which usually
       finds fewer unplaced sections than the greedy engine.
       <strong>Expect tens of seconds, and occasionally a couple of minutes</strong> —
-      solve time varies substantially from run to run, and the maximum is 8 minutes,
-      after which the best schedule found so far is used. That variation is
-      deliberate: the engine is not seeded, so re-running it gives you a
-      different valid timetable to choose between. Writes
+      solve time varies from run to run, and there is a ceiling (shown on the clock
+      once a run starts) after which the best schedule found so far is used. Writes
       <strong>schedule_cpsat.json</strong> / <strong>schedule_cpsat.csv</strong>,
       so it never touches the greedy engine's output — you can keep reading and
       exporting the greedy schedule while this one solves.
@@ -154,7 +162,12 @@
       <button class="btn-run" id="btn-cpsat">▶ Run CP-SAT</button>
       <span class="badge badge-idle" id="badge-cpsat">Idle</span>
       <span class="clock" id="clock-cpsat">—</span>
+      <label class="opt" for="rand-cpsat" title="Whether re-running gives you a new timetable or the same one">
+        <input type="checkbox" id="rand-cpsat" checked>
+        Vary the schedule each run
+      </label>
     </div>
+    <p class="opt-hint" id="rand-hint-cpsat"></p>
     <div class="log-label">Output</div>
     <div class="log" id="log-cpsat">
       <span class="log-empty">Output will appear here when you run this engine.</span>
@@ -185,6 +198,8 @@ function EngineConsole(key, opts) {
     dl:     document.getElementById('dl-' + key),
     why:    document.getElementById('why-' + key),
     clock:  document.getElementById('clock-' + key),   // CP-SAT only
+    rand:   document.getElementById('rand-' + key),    // CP-SAT only
+    randHint: document.getElementById('rand-hint-' + key),
   };
 
   const self = {
@@ -205,6 +220,35 @@ function EngineConsole(key, opts) {
 
   el.btn.addEventListener('click', () => self.start());
 
+  /* ── Randomization toggle (CP-SAT only) ──
+   * Remembered in localStorage, not in settings.csv: it is a per-run choice,
+   * and writing the user's settings file every time someone ticks a box on the
+   * Run page would be a surprising side effect. The server falls back to
+   * settings.csv when no value is sent, so the two never fight — the box is
+   * simply the last word for the run it starts. */
+  const RAND_STORE = 'cpsat-randomize';
+
+  self.randomize = function () {
+    return el.rand ? el.rand.checked : null;
+  };
+
+  if (el.rand) {
+    let saved = null;
+    try { saved = localStorage.getItem(RAND_STORE); } catch (e) { /* private mode */ }
+    if (saved !== null) el.rand.checked = saved === '1';
+    self.paintRandHint = function () {
+      if (!el.randHint) return;
+      el.randHint.textContent = el.rand.checked
+        ? 'On: each run returns a different, equally good timetable — re-run to see other options.'
+        : 'Off: the same inputs always produce the same timetable — useful for comparing two sets of inputs, or reproducing a schedule you already shared. Expect it to take several minutes rather than under one: pinning the result down means the solver has to stop working in parallel.';
+    };
+    el.rand.addEventListener('change', () => {
+      try { localStorage.setItem(RAND_STORE, el.rand.checked ? '1' : '0'); } catch (e) { /* private mode */ }
+      self.paintRandHint();
+    });
+    self.paintRandHint();
+  }
+
   self.start = async function () {
     if (self.running || !self.available) return;
     self.clearLog();
@@ -212,7 +256,10 @@ function EngineConsole(key, opts) {
 
     let res;
     try {
-      res = await fetch('/api/run?engine=' + key, { method: 'POST' });
+      const rand = self.randomize();
+      const q = '/api/run?engine=' + key
+              + (rand === null ? '' : '&randomize=' + (rand ? '1' : '0'));
+      res = await fetch(q, { method: 'POST' });
     } catch (e) {
       self.log('[Could not reach the server: ' + e.message + ']', 'error');
       self.setBadge('error');
@@ -302,6 +349,9 @@ function EngineConsole(key, opts) {
   self.setRunning = function (state) {
     self.running = state;
     el.btn.disabled = state || !self.available;
+    // Locked while solving: the setting is read once when the run starts, so a
+    // box you could still tick would be lying about what is happening.
+    if (el.rand) el.rand.disabled = state || !self.available;
     if (state) self.setBadge('running');
     self.tickClock();
     if (state && !self.timer && el.clock) {
@@ -332,6 +382,7 @@ function EngineConsole(key, opts) {
   self.setAvailability = function (available, reason) {
     self.available = available;
     el.btn.disabled = !available || self.running;
+    if (el.rand) el.rand.disabled = !available || self.running;
     if (available) {
       el.why.classList.remove('show');
       el.why.textContent = '';

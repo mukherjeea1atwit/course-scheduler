@@ -125,6 +125,64 @@ class ServerApi(unittest.TestCase):
         self.assertEqual(r.status_code, 422)
         self.assertIn("bogus", r.json()["detail"])
 
+    # ── the Run page's randomization toggle ──────────────────────────────────
+    def test_randomize_flag_reaches_the_cpsat_engine(self):
+        """The toggle is only worth having if the value actually arrives.
+
+        The engine itself is stubbed out: this asserts the wiring from query
+        string to _run(randomize=...), not that CP-SAT solves — a real solve
+        takes a minute and needs ortools.
+        """
+        import server as srv
+        seen = []
+
+        def fake_entry(key, randomize=None):
+            return lambda: seen.append(randomize)
+
+        # Availability is stubbed alongside the engine: this test runs against a
+        # copy of the app that has no main_cpsat.py, and on a machine that may
+        # not have ortools. Neither is what is under test here — the wiring is.
+        original_entry, original_avail = srv._entry_point, srv._engine_available
+        srv._entry_point = fake_entry
+        srv._engine_available = lambda key: (True, "")
+        try:
+            for query, expected in (({}, None),
+                                    ({"randomize": "0"}, False),
+                                    ({"randomize": "1"}, True),
+                                    ({"randomize": "false"}, False),
+                                    ({"randomize": "true"}, True)):
+                params = {"engine": "cpsat", **query}
+                r = self.client.post("/api/run", params=params)
+                self.assertEqual(r.status_code, 200, msg=r.text)
+                self.assertEqual(r.json()["randomize"], expected)
+                self._wait_for_idle("cpsat")
+            self.assertEqual(seen, [None, False, True, False, True])
+        finally:
+            srv._entry_point, srv._engine_available = original_entry, original_avail
+
+    def test_randomize_rejects_a_value_that_is_not_a_yes_or_no(self):
+        """422, not a run that quietly starts with the wrong setting. This one
+        needs no availability stub: parameter validation happens first."""
+        r = self.client.post("/api/run", params={"engine": "cpsat", "randomize": "banana"})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("randomize", str(r.json()["detail"]))
+
+    def test_greedy_ignores_the_randomize_flag(self):
+        """The greedy engine is deterministic by construction, so the flag has
+        no meaning there — it must be dropped, not passed to _run()."""
+        import server as srv
+        self.assertIs(srv._entry_point("greedy", False), srv._run)
+        self.assertIs(srv._entry_point("greedy", True), srv._run)
+
+    def _wait_for_idle(self, engine, timeout=10.0):
+        import time
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self.client.get("/api/run/status", params={"engine": engine}).json()["running"]:
+                return
+            time.sleep(0.05)
+        self.fail(f"{engine} run never finished")
+
 
 if __name__ == "__main__":
     unittest.main()

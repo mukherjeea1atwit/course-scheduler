@@ -1,6 +1,7 @@
 """WIT Class Scheduler — Web API"""
 import asyncio
 import csv
+import functools
 import importlib.util
 import io
 import json
@@ -269,11 +270,28 @@ def _require_file(slug: str) -> Path:
 # run cannot grow the process without bound; it is far above normal output.
 MAX_TRANSCRIPT_LINES = 20000
 
-# Mirrors CPSAT_TIME_LIMIT_S in main_cpsat.py. Duplicated rather than imported
-# because server.py must not import main_cpsat at module level — that module is
-# optional on a machine that only ever runs the greedy engine, and the greedy
-# path has to keep working when it is absent.
+# Mirrors CPSAT_TIME_LIMIT_S / CPSAT_DETERMINISTIC_WALL_S in main_cpsat.py.
+# Duplicated rather than imported because server.py must not import main_cpsat
+# at module level — a damaged install missing that module (or ortools) still has
+# to be able to run the greedy engine and explain what is wrong.
+# These feed the Run page's "elapsed / maximum" clock only; the numbers that
+# actually bound a solve live in main_cpsat.py.
 CPSAT_TIME_LIMIT_S = 480.0
+CPSAT_DETERMINISTIC_WALL_S = 1800.0
+
+
+def _cpsat_time_limit(run: "_EngineRun | None" = None) -> float:
+    """The ceiling to show on the clock for a CP-SAT run.
+
+    Deterministic runs get a much longer backstop, so a clock showing the
+    randomized ceiling would tick past its own maximum. When the run did not
+    say which mode it wants (`randomize is None` — it is deferring to
+    settings.csv, which only main_cpsat.py reads), the randomized ceiling is
+    the honest guess: it is the shipped default.
+    """
+    if run is not None and run.randomize is False:
+        return CPSAT_DETERMINISTIC_WALL_S
+    return CPSAT_TIME_LIMIT_S
 
 # Per-engine file names. Distinct on both sides, so a CP-SAT run can never
 # overwrite something the greedy engine produced (and vice versa) — that
@@ -315,6 +333,10 @@ class _EngineRun:
         self.cv = threading.Condition()
         self.started_at: float | None = None
         self.finished_at: float | None = None
+        # Per-run engine options, read once by the worker thread when it starts.
+        # Held here rather than passed to the thread so that a run started from
+        # one browser tab is described correctly to every other tab.
+        self.randomize: bool | None = None
 
 
 _RUNS: Dict[str, _EngineRun] = {
@@ -347,8 +369,10 @@ def _cpsat_available() -> bool:
 
     find_spec rather than an import: importing ortools costs a second and pulls
     in a large native extension, and this is called on every poll of the Run
-    page. A missing spec is the normal case on the customer's machine unless
-    they installed requirements-cpsat.txt.
+    page. A missing spec means a damaged or incomplete install — ortools is a
+    required package (see requirements-cpsat.txt) and the Windows installer
+    fails rather than finishing without it — so the check should essentially
+    never fire; it exists so the rest of the app degrades instead of crashing.
     """
     try:
         return importlib.util.find_spec("ortools") is not None
@@ -365,8 +389,11 @@ def _engine_available(key: str) -> tuple[bool, str]:
     if not (BASE_DIR / "main_cpsat.py").exists():
         return False, "The CP-SAT engine (main_cpsat.py) is not installed alongside this server."
     if not _cpsat_available():
-        return False, ("The CP-SAT engine needs Google OR-Tools, which is not installed. "
-                       "Install it with: pip install -r requirements-cpsat.txt")
+        return False, ("The CP-SAT engine needs Google OR-Tools (ortools), which is missing "
+                       "from this install. ortools is a required package, so this install is "
+                       "incomplete or damaged: re-run install.bat to repair it. To patch it in "
+                       "place instead, run this in the course-scheduler folder: "
+                       r"venv\Scripts\python.exe -m pip install -r requirements-cpsat.txt")
     return True, ""
 
 
@@ -447,24 +474,27 @@ class _StdoutRouter(io.TextIOBase):
             self._real.flush()
 
 
-def _entry_point(key: str):
-    """Resolve an engine key to its callable, importing CP-SAT only on demand.
+def _entry_point(key: str, randomize: bool | None = None):
+    """Resolve an engine key to a zero-argument callable, importing CP-SAT on demand.
 
-    main_cpsat is imported here and not at module scope on purpose: it is an
-    optional component, and an install without it (or without ortools) must
-    still be able to run the greedy engine.
+    main_cpsat is imported here and not at module scope on purpose. Both the
+    module and ortools are required parts of the product, but a damaged install
+    missing either one must still be able to run the greedy engine and say what
+    is wrong, rather than failing to start the server at all.
     """
     if key == "greedy":
+        # The greedy engine has no options: it is deterministic by construction,
+        # so there is nothing for a randomize flag to mean here.
         return _run
     import main_cpsat                                   # noqa: PLC0415
-    return main_cpsat._run
+    return functools.partial(main_cpsat._run, randomize=randomize)
 
 
 def _worker(run: _EngineRun) -> None:
     _StdoutRouter.bind(run)
     crashed = False
     try:
-        _entry_point(run.key)()
+        _entry_point(run.key, run.randomize)()
     except Exception as exc:
         crashed = True
         _emit(run, f"[ERROR] {run.label} scheduler crashed: {exc}")
@@ -743,7 +773,7 @@ def list_engines():
             "state": state,
             "has_output": (BASE_DIR / cfg["json"]).exists(),
             "elapsed": _elapsed(started, finished, busy),
-            "time_limit": CPSAT_TIME_LIMIT_S if key == "cpsat" else None,
+            "time_limit": _cpsat_time_limit(_RUNS[key]) if key == "cpsat" else None,
         }
     return {"engines": out, "default": DEFAULT_ENGINE}
 
@@ -762,12 +792,20 @@ def _elapsed(started: float | None, finished: float | None, busy: bool) -> float
 
 
 @app.post("/api/run")
-def start_run(engine: str = DEFAULT_ENGINE):
+def start_run(engine: str = DEFAULT_ENGINE, randomize: bool | None = None):
+    """Start one engine. `randomize` is the Run page's per-run override.
+
+    Omitted (the default) means "use data/settings.csv", which is what a run
+    started outside the Run page gets. The value is deliberately not written
+    back to settings.csv: ticking a box to try one run must not silently edit
+    the user's own configuration file.
+    """
     key = _engine_key(engine)
     run = _RUNS[key]
-    # Availability is checked BEFORE the thread starts, so an install without
-    # ortools gets one clear sentence naming requirements-cpsat.txt instead of
-    # an ImportError traceback buried in the console of a run that "started".
+    # Availability is checked BEFORE the thread starts, so an install missing
+    # ortools gets one clear sentence telling the user to re-run the installer
+    # instead of an ImportError traceback buried in the console of a run that
+    # "started".
     available, reason = _engine_available(key)
     if not available:
         raise HTTPException(status_code=503, detail=reason)
@@ -779,6 +817,7 @@ def start_run(engine: str = DEFAULT_ENGINE):
             detail=f"The {run.label} scheduler is already running.",
         )
     run.busy = True
+    run.randomize = randomize
     # A new run replaces the previous transcript for THIS engine only. Indices
     # restart at 0, which is why the client re-reads /api/run/log after starting
     # rather than assuming its old cursor is still valid.
@@ -793,7 +832,7 @@ def start_run(engine: str = DEFAULT_ENGINE):
     # the first run exists.
     _StdoutRouter.install()
     threading.Thread(target=_worker, args=(run,), daemon=True).start()
-    return {"status": "started", "engine": key}
+    return {"status": "started", "engine": key, "randomize": randomize}
 
 
 @app.get("/api/run/status")
@@ -803,7 +842,7 @@ def run_status(engine: str = DEFAULT_ENGINE):
         return {"engine": run.key, "running": run.busy, "state": run.state,
                 "lines": run.dropped + len(run.transcript),
                 "elapsed": _elapsed(run.started_at, run.finished_at, run.busy),
-                "time_limit": CPSAT_TIME_LIMIT_S if run.key == "cpsat" else None}
+                "time_limit": _cpsat_time_limit(run) if run.key == "cpsat" else None}
 
 
 @app.get("/api/run/log")
@@ -823,7 +862,7 @@ def run_log(engine: str = DEFAULT_ENGINE):
             "running": run.busy,
             "state": run.state,
             "elapsed": _elapsed(run.started_at, run.finished_at, run.busy),
-            "time_limit": CPSAT_TIME_LIMIT_S if run.key == "cpsat" else None,
+            "time_limit": _cpsat_time_limit(run) if run.key == "cpsat" else None,
         }
 
 

@@ -518,6 +518,13 @@ SETTING_DEFAULTS: Dict[str, object] = {
     "am_target_ratio": 0.60,
 }
 
+# Keys that belong to the OTHER engine. settings.csv is one file shared by both
+# schedulers, so the greedy engine sees CP-SAT's keys and vice versa. Listing
+# them here keeps a legitimate setting from being reported as a typo — the
+# alternative, a [WARN] on every greedy run about a key the user set on purpose,
+# trains people to ignore the warnings that matter.
+FOREIGN_SETTINGS = frozenset({"cpsat_randomize"})
+
 
 def load_settings(path: str) -> Dict[str, str]:
     """Load key/value tunables from data/settings.csv into the module globals.
@@ -547,7 +554,7 @@ def load_settings(path: str) -> Dict[str, str]:
             k = (r.get("setting") or "").strip()
             v = (r.get("value") or "").strip()
             if k:
-                if k not in SETTING_DEFAULTS:
+                if k not in SETTING_DEFAULTS and k not in FOREIGN_SETTINGS:
                     print(f"[WARN] settings.csv: unknown setting {k!r} — ignored. "
                           f"Valid names: {', '.join(sorted(SETTING_DEFAULTS))}")
                 out[k] = v
