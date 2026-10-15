@@ -187,6 +187,42 @@ Once installed (either option above), start the app:
 4. **Export results.** The generated `schedule.csv` and `schedule.json` are
    written to the project folder, and can be downloaded from the app.
 
+### Meeting lengths and lab meetings (`meeting_patterns.csv`)
+
+Each row says how a course meets, matched on the course's subject, its
+"lecture days per week" and its "lecture hours" from `course-list.csv` (a `*`
+or blank cell matches anything; the most specific matching row wins).
+
+| Column | Meaning |
+|---|---|
+| `subject` | Subject prefix such as `MATH`, or `*` for any subject. |
+| `lecture_days_per_week` | Lecture days a week this row applies to. |
+| `lecture_hours` | Lecture hours this row applies to; blank = any. |
+| `meeting_minutes` | Length of each lecture meeting. |
+| `lab_minutes` | Length of each lab meeting (`0` = no lab). Only used when the course list gives the course lab hours. |
+| `lab_meetings_per_week` | *Optional.* How many lab meetings a week. Blank, or a file without this column, means **1**. |
+| `notes` | Free text. |
+
+Every lab meeting of a section is on its own weekday, none of them on a lecture
+day, at one shared time, taught by the lecture's professor. The whole section
+counts as **one** course toward that professor's load. A single weekly lab
+starts at the same clock time as its lecture; a course with several lab
+meetings is free to pick a different time for its labs.
+
+Example: COMP5500 Senior Project is a "1-6-4" course — one 60-minute lecture
+plus three 120-minute labs a week. It is written as:
+
+```
+course-list.csv:       COMP5500,Senior Project,1,1,6,6,
+meeting_patterns.csv:  *,1,1,60,120,3,1-6-4 offering ...
+```
+
+and `timings.csv` must offer 60- and 120-minute slots (it ships with them).
+If you copy an older `course-list.csv` back after an update, change the
+COMP5500 row to `1,1,6,6` as above — the old `1,3,0,6` row asks for a single
+180-minute meeting that no time slot offers, so every section is reported
+UNPLACED.
+
 ### Stopping the app
 
 - **Installer method:** close the minimized **"WIT Class Scheduler -

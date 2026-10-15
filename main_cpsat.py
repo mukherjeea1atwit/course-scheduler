@@ -198,8 +198,13 @@ class ScheduledSection:
     has_lab: bool
     is_lab: bool = False
     topup: bool = False   # assigned via the underload top-up exception (non-preferred prof)
-    days_per_week: int = 0  # days/week this lecture was supposed to meet (0 = unknown)
+    days_per_week: int = 0  # days/week this lecture (or lab block) was supposed to meet (0 = unknown)
     forced: bool = False    # placed by the last-resort fallback; not a valid assignment
+    # Minutes each meeting was supposed to last, when the C7 check cannot infer
+    # it (0 = use the historical windows). Set for the lab block of a multi-lab
+    # course, whose lab length comes from meeting_patterns.csv rather than the
+    # institutional ~105-minute lab.
+    meeting_min: int = 0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -282,6 +287,10 @@ def per_meeting_min(total_min: int, num_days: int) -> int:
 # "COMP1050-3" → ("COMP1050", "3");  "MATH-1500-1-LAB" → ("MATH-1500", "1")
 # The course number itself may contain hyphens and slashes, so only the trailing
 # "-<digits>" (optionally followed by "-LAB") is treated as the section number.
+# A course with several lab meetings a week still has ONE "-LAB" entry per
+# section: its lab block meets on several days at one time, exactly as a
+# multi-day lecture does, so every export, the UI and the validator keep
+# working on the same id scheme.
 _SECTION_ID_RE = re.compile(r"^(?P<course>.+)-(?P<sec>\d+)(?P<lab>-LAB)?$", re.IGNORECASE)
 
 
@@ -305,12 +314,19 @@ class MeetingRule:
 
     `subject` and `lecture_hours` may be blank/None meaning "any". The most
     specific matching rule wins, so a MATH-specific row beats a wildcard row and
-    an hours-specific row beats an hours-blank one."""
+    an hours-specific row beats an hours-blank one.
+
+    `lab_meetings` is how many lab meetings a week the course has (the optional
+    `lab_meetings_per_week` column; blank or missing = 1). Each lab meeting is
+    `lab_minutes` long and falls on its own weekday, none of them a lecture day.
+    The 1-6-4 senior project, for example, is one 60-minute lecture plus three
+    120-minute labs: meeting_minutes=60, lab_minutes=120, lab_meetings=3."""
     subject: Optional[str]
     days_per_week: int
     lecture_hours: Optional[int]
     meeting_minutes: int
     lab_minutes: int
+    lab_meetings: int = 1
 
     def matches(self, subject: str, days: int, hours: int) -> bool:
         if self.days_per_week != days:
@@ -338,6 +354,8 @@ DEFAULT_MEETING_RULES: List[MeetingRule] = [
     MeetingRule("MATH", 2, None, 105, 0),   # math meets 105 min T/Th
     MeetingRule(None,   3, None, 70,  0),   # 70 min M/W/F (or any 3 days)
     MeetingRule(None,   4, None, 70,  0),   # 70 min across 4 days
+    # 1-6-4 (COMP5500 senior project): 60-min lecture + three 120-min labs.
+    MeetingRule(None,   1, 1, 60, 120, 3),
 ]
 
 MEETING_RULES: List[MeetingRule] = list(DEFAULT_MEETING_RULES)
@@ -368,13 +386,61 @@ def meeting_minutes(course_number: str, lecture_hours: int, num_days: int) -> in
 
 
 def lab_minutes(course_number: str, lecture_hours: int, lab_hours: int, num_days: int) -> int:
-    """Minutes for the single weekly lab meeting, or 0 if the course has no lab."""
+    """Minutes for EACH weekly lab meeting, or 0 if the course has no lab.
+    How many lab meetings there are is lab_meetings_per_week()."""
     if lab_hours <= 0 or is_grad(course_number):
         return 0
     rule = meeting_rule_for(course_number, lecture_hours, num_days)
     if rule and rule.lab_minutes:
         return rule.lab_minutes
     return 105 if lab_hours >= 2 else lab_hours * 60
+
+
+def lab_meetings_per_week(course_number: str, lecture_hours: int, lab_hours: int,
+                          num_days: int) -> int:
+    """How many lab meetings a week: 0 without a lab, otherwise the matching
+    meeting_patterns.csv rule's `lab_meetings_per_week` (1 when the rule leaves
+    it blank, when the file has no such column, or when no rule matches).
+
+    Every lab meeting of a section is on its own weekday and none is on a
+    lecture day. A course whose lecture days plus lab meetings exceed the five
+    weekdays cannot be placed; it is reported UNPLACED with that reason."""
+    if lab_minutes(course_number, lecture_hours, lab_hours, num_days) <= 0:
+        return 0
+    rule = meeting_rule_for(course_number, lecture_hours, num_days)
+    return max(1, rule.lab_meetings) if rule else 1
+
+
+# Lab sessions are 1 h 45 min (105 min) in the 3-2-4 offering, so a single-lab
+# course takes a lab slot between its meeting_patterns.csv lab length and this
+# ceiling — unchanged behaviour. A multi-lab course states its own lab length
+# (120 min for the 1-6-4 senior project), so its ceiling is that length.
+LAB_MAX_MIN = 105
+
+
+def lab_max_minutes(lab_min: int) -> int:
+    """Longest slot a lab of `lab_min` minutes may occupy."""
+    return max(LAB_MAX_MIN, lab_min)
+
+
+def lab_meeting_min(lab_min: int, n_labs: int) -> int:
+    """The exact lab length the C7 check holds a lab entry to (its
+    ScheduledSection.meeting_min), or 0 for the historical ~105-minute window.
+    Exact whenever the lab could only take slots of its own length: a multi-lab
+    block, or a single lab longer than LAB_MAX_MIN (e.g. a 120-minute lab, which
+    lab_max_minutes() lets the search place but the 100-110 window would reject)."""
+    return lab_min if (n_labs > 1 or lab_min > LAB_MAX_MIN) else 0
+
+
+def lab_day_patterns(n_labs: int, exclude: List[str]) -> List[List[str]]:
+    """Every way to put `n_labs` lab meetings on distinct weekdays, none of them
+    in `exclude` (the lecture days), best-spread first. One lab → one day each,
+    in weekday order, which is the pool single-lab courses have always used."""
+    free = [d for d in ALL_DAYS if d not in exclude]
+    if n_labs <= 1:
+        return [[d] for d in free]
+    combos = itertools.combinations(free, n_labs)
+    return [list(c) for c in sorted(combos, key=lambda c: _spread_score(list(c)))]
 
 
 _DAYS_WARNED: set = set()
@@ -527,12 +593,22 @@ def load_meeting_patterns(path: str) -> List[MeetingRule]:
                 continue
             subj = (r.get("subject") or "").strip().upper()
             hours_raw = (r.get("lecture_hours") or "").strip()
+            # Optional column: files written before it existed have no such key,
+            # and a blank cell means the historical single weekly lab.
+            labs_raw = (r.get("lab_meetings_per_week") or "").strip()
+            labs = to_int(labs_raw, default=-1) if labs_raw else 1
+            if labs < 1 or labs > len(ALL_DAYS):
+                print(f"[WARN] meeting_patterns.csv: lab_meetings_per_week={labs_raw!r} "
+                      f"for subject={subj or '*'} days={days} is not a whole number from "
+                      f"1 to {len(ALL_DAYS)}. Using 1.")
+                labs = 1
             rules.append(MeetingRule(
                 subject=subj if subj and subj != "*" else None,
                 days_per_week=days,
                 lecture_hours=int(hours_raw) if hours_raw.isdigit() else None,
                 meeting_minutes=to_int(r.get("meeting_minutes", "")),
                 lab_minutes=to_int(r.get("lab_minutes", "")),
+                lab_meetings=labs,
             ))
     seen: Dict[Tuple, int] = {}
     for i, r in enumerate(rules, start=2):   # +2: header row, 1-indexed
@@ -1180,10 +1256,9 @@ def _warn_time_limit_broke_determinism() -> None:
           "The inputs are probably harder than the ones this mode was sized for "
           "— re-run with randomization ON for a faster answer.")
 
-# Lab sessions are 1 h 45 min in the 3-2-4 offering. Module level (the greedy
-# engine had it nested inside build_schedule) because the model builder, the
-# placeholder fallback and the diagnostics all need it.
-LAB_MAX_MIN = 105
+# LAB_MAX_MIN / lab_max_minutes() are defined with the other meeting-length
+# helpers near the top of the file: the model builder, the placeholder fallback
+# and the diagnostics all need them.
 
 
 def _bool_of_sum(model, lits, name: str):
@@ -1277,28 +1352,36 @@ def _legal_lecture_combos(
 def _legal_lab_combos(
     timeslots: List[TimeSlot],
     lab_min: int,
-) -> List[Tuple[str, TimeSlot]]:
-    """Every (day, slot) pair a lab meeting may take, ignoring its lecture.
+    n_labs: int = 1,
+) -> List[Tuple[Tuple[str, ...], TimeSlot]]:
+    """Every (lab day-set, slot) pair a section's lab block may take, ignoring
+    its lecture. The day-set has one day for the 3-2-4 offering's single lab and
+    `n_labs` DISTINCT days for a multi-lab course (all meetings at one time, the
+    way a multi-day lecture is stored).
 
-    The lab's two couplings to its lecture — same start time, different day — are
-    channelled in the model rather than enumerated here, which is what keeps this
-    O(days × slots) instead of O(lecture placements × days × slots)."""
-    out: List[Tuple[str, TimeSlot]] = []
+    The lab's couplings to its lecture — different days, and for a single lab
+    the same start time — are channelled in the model rather than enumerated
+    here, which is what keeps this O(day-sets × slots) instead of
+    O(lecture placements × day-sets × slots)."""
+    out: List[Tuple[Tuple[str, ...], TimeSlot]] = []
     if lab_min <= 0:
         return out
+    patterns = lab_day_patterns(n_labs, [])
     for slot in timeslots:
         # Labs are 105 min in the 3-2-4 offering; the lower bound comes from
-        # meeting_patterns.csv, the upper bound is the institutional lab length.
-        if not (lab_min <= slot.duration_min <= LAB_MAX_MIN):
+        # meeting_patterns.csv, the upper bound is the institutional lab length
+        # (or the course's own, longer, lab length — see lab_max_minutes).
+        if not (lab_min <= slot.duration_min <= lab_max_minutes(lab_min)):
             continue
         if slot.evening or slot.start.hour >= GRAD_START_HR:
             continue
-        for d in (slot.days_allowed or ALL_DAYS):
-            if d not in ALL_DAYS:
+        allowed = [d for d in (slot.days_allowed or ALL_DAYS) if d in ALL_DAYS]
+        for pat in patterns:
+            if not all(d in allowed for d in pat):
                 continue
-            if overlaps_reserved([d], slot.start, slot.stop):
+            if overlaps_reserved(pat, slot.start, slot.stop):
                 continue
-            out.append((d, slot))
+            out.append((tuple(pat), slot))
     return out
 
 
@@ -1309,9 +1392,9 @@ class _SecModel:
     makes the channelling readable — every constraint below reads `sm.day[d]`,
     `sm.start`, `sm.y[f]` and never has to re-derive which literals mean what."""
 
-    __slots__ = ("sec", "n_days", "per_day", "lab_min", "grad", "combos",
+    __slots__ = ("sec", "n_days", "per_day", "lab_min", "n_labs", "grad", "combos",
                  "lab_combos", "cands", "sel", "lab_sel", "unpl", "start",
-                 "labdur", "lab_end", "lab_end_gap", "lab_size_gap",
+                 "lab_start", "labdur", "lab_end", "lab_end_gap", "lab_size_gap",
                  "day", "labday", "y", "sig", "topup_cands")
 
     def __init__(self, sec: Section, timeslots: List[TimeSlot]):
@@ -1321,14 +1404,19 @@ class _SecModel:
         self.per_day = meeting_minutes(sec.course_number, sec.lecture_hours, self.n_days)
         self.lab_min = lab_minutes(sec.course_number, sec.lecture_hours,
                                    sec.lab_hours, self.n_days)
+        # Lab meetings a week: 0 (no lab), 1 (the 3-2-4 offering) or more (the
+        # 1-6-4 senior project's three), from meeting_patterns.csv.
+        self.n_labs = lab_meetings_per_week(sec.course_number, sec.lecture_hours,
+                                            sec.lab_hours, self.n_days)
         self.combos = _legal_lecture_combos(sec, timeslots, self.per_day,
                                             _patterns_for_section(sec))
-        self.lab_combos = _legal_lab_combos(timeslots, self.lab_min)
-        # C17 (lab starts with its lecture) is enforced by an equality on start
-        # minutes, so a lecture start with no lab slot at the same clock time can
-        # never be part of a solution. Dropping those combos up front shrinks the
-        # domain instead of leaving the solver to discover it by propagation.
-        if self.lab_min > 0:
+        self.lab_combos = _legal_lab_combos(timeslots, self.lab_min, max(self.n_labs, 1))
+        # C17 (a single lab starts with its lecture) is enforced by an equality on
+        # start minutes, so a lecture start with no lab slot at the same clock time
+        # can never be part of a solution. Dropping those combos up front shrinks
+        # the domain instead of leaving the solver to discover it by propagation.
+        # A multi-lab block is exempt from C17, so nothing is pruned for it.
+        if self.lab_min > 0 and self.n_labs <= 1:
             lab_starts = {t2m(s.start) for _d, s in self.lab_combos}
             self.combos = [c for c in self.combos if t2m(c[1].start) in lab_starts]
         self.cands: List[str] = []
@@ -1339,6 +1427,7 @@ class _SecModel:
         self.lab_sel: List = []
         self.unpl = None
         self.start = None
+        self.lab_start = None
         self.labdur = None
         self.lab_end = None
         self.lab_end_gap = None
@@ -1444,8 +1533,10 @@ def build_schedule_cpsat(
             model.Add(v == sum(lit for lit, c in zip(sm.sel, combos) if d in c[0]))
             sm.day[d] = v
 
-        # ── lab placement (C9 different day, C10 one day, C17 same start) ─────
+        # ── lab placement (C9 different days, C10 its declared number of ──────
+        # distinct days, C17 same start for a single lab) ─────────────────────
         if sm.lab_min > 0:
+            lab_max = lab_max_minutes(sm.lab_min)
             lab_combos = list(sm.lab_combos)
             if CPSAT_RANDOMIZE:
                 random.shuffle(lab_combos)
@@ -1456,10 +1547,18 @@ def build_schedule_cpsat(
             # unplaced as a unit — a lab of a lecture that does not exist would
             # otherwise book a real room for a class nobody is teaching.
             model.AddExactlyOne(sm.lab_sel + [sm.unpl])
-            # C17: lab starts at the same clock time as its lecture.
-            model.Add(sum(v * t2m(c[1].start) for v, c in zip(sm.lab_sel, lab_combos))
-                      == sm.start)
-            sm.labdur = model.NewIntVar(0, LAB_MAX_MIN, f"labdur[{sec.id}]")
+            if sm.n_labs <= 1:
+                # C17: a single lab starts at the same clock time as its lecture,
+                # so the lab block reads the lecture's own start variable.
+                model.Add(sum(v * t2m(c[1].start) for v, c in zip(sm.lab_sel, lab_combos))
+                          == sm.start)
+                sm.lab_start = sm.start
+            else:
+                # A multi-lab block is exempt from C17 and has its own start.
+                sm.lab_start = model.NewIntVar(0, 24 * 60, f"labstart[{sec.id}]")
+                model.Add(sm.lab_start == sum(v * t2m(c[1].start)
+                                              for v, c in zip(sm.lab_sel, lab_combos)))
+            sm.labdur = model.NewIntVar(0, lab_max, f"labdur[{sec.id}]")
             model.Add(sm.labdur == sum(v * c[1].duration_min
                                        for v, c in zip(sm.lab_sel, lab_combos)))
             # OptionalIntervalVar wants AFFINE endpoints (one variable times a
@@ -1467,20 +1566,22 @@ def build_schedule_cpsat(
             # duration. Materialising the end and the gap-extended end/size once
             # per section keeps every interval below affine — and costs three
             # variables per lab section rather than three per (section, prof, day).
-            sm.lab_end = model.NewIntVar(0, 24 * 60 + LAB_MAX_MIN, f"labend[{sec.id}]")
-            model.Add(sm.lab_end == sm.start + sm.labdur)
-            sm.lab_size_gap = model.NewIntVar(0, LAB_MAX_MIN + FACULTY_GAP_MIN,
+            sm.lab_end = model.NewIntVar(0, 24 * 60 + lab_max, f"labend[{sec.id}]")
+            model.Add(sm.lab_end == sm.lab_start + sm.labdur)
+            sm.lab_size_gap = model.NewIntVar(0, lab_max + FACULTY_GAP_MIN,
                                               f"labsz[{sec.id}]")
             model.Add(sm.lab_size_gap == sm.labdur + FACULTY_GAP_MIN)
-            sm.lab_end_gap = model.NewIntVar(0, 24 * 60 + LAB_MAX_MIN + FACULTY_GAP_MIN,
+            sm.lab_end_gap = model.NewIntVar(0, 24 * 60 + lab_max + FACULTY_GAP_MIN,
                                              f"labendg[{sec.id}]")
-            model.Add(sm.lab_end_gap == sm.start + sm.lab_size_gap)
+            model.Add(sm.lab_end_gap == sm.lab_start + sm.lab_size_gap)
             for d in ALL_DAYS:
                 v = model.NewBoolVar(f"labday[{sec.id}][{d}]")
                 model.Add(v == sum(lit for lit, c in zip(sm.lab_sel, lab_combos)
-                                   if c[0] == d))
+                                   if d in c[0]))
                 sm.labday[d] = v
-                # C9: the lab never shares a day with its own lecture.
+                # C9: no lab meeting shares a day with its own lecture. The lab
+                # meetings are on distinct days of each other by construction
+                # (every lab day-set is a set of distinct weekdays).
                 model.Add(v + sm.day[d] <= 1)
 
         # ── faculty: preference rows are HARD, enforced by domain construction.
@@ -1563,11 +1664,16 @@ def build_schedule_cpsat(
                 model.AddBoolOr([fday[(f, d)], sm.y[f].Not(), sm.day[d].Not()])
                 if sm.lab_min > 0:
                     model.AddBoolOr([fday[(f, d)], sm.y[f].Not(), sm.labday[d].Not()])
-        long_courses = [sm for sm in teaches if sm.n_days > MAX_TEACHING_DAYS]
+        # A course's own day count is its lecture days plus its lab meetings
+        # (each lab meeting is on a day of its own) — the same count the greedy
+        # engine's lab search, its top-up and the C4 checker use.
+        def own_days(sm):
+            return sm.n_days + sm.n_labs
+        long_courses = [sm for sm in teaches if own_days(sm) > MAX_TEACHING_DAYS]
         if long_courses:
             allow = model.NewIntVar(MAX_TEACHING_DAYS, len(ALL_DAYS), f"allow[{f}]")
             for sm in long_courses:
-                model.Add(allow >= sm.n_days).OnlyEnforceIf(sm.y[f])
+                model.Add(allow >= min(own_days(sm), len(ALL_DAYS))).OnlyEnforceIf(sm.y[f])
             # The lower bound alone is not enough. `allow` is not in the
             # objective, so with only "allow >= n_days if assigned" the solver is
             # free to park it at 5 and hand this professor a fifth teaching day
@@ -1578,7 +1684,8 @@ def build_schedule_cpsat(
             # actually assigned pins it back to MAX_TEACHING_DAYS unless a long
             # course really landed here.
             model.Add(allow <= MAX_TEACHING_DAYS + sum(
-                (sm.n_days - MAX_TEACHING_DAYS) * sm.y[f] for sm in long_courses))
+                (min(own_days(sm), len(ALL_DAYS)) - MAX_TEACHING_DAYS) * sm.y[f]
+                for sm in long_courses))
             model.Add(sum(fday[(f, d)] for d in ALL_DAYS) <= allow)
         else:
             model.Add(sum(fday[(f, d)] for d in ALL_DAYS) <= MAX_TEACHING_DAYS)
@@ -1616,10 +1723,10 @@ def build_schedule_cpsat(
                     lpres = _and_lit(model, sm.y[f], sm.labday[d],
                                      f"lp[{sm.sec.id}][{f}][{d}]")
                     ivs.append(model.NewOptionalIntervalVar(
-                        sm.start, sm.lab_size_gap, sm.lab_end_gap,
+                        sm.lab_start, sm.lab_size_gap, sm.lab_end_gap,
                         lpres, f"liv[{sm.sec.id}][{f}][{d}]"))
-                    model.Add(f_lo <= sm.start).OnlyEnforceIf(lpres)
-                    model.Add(f_hi >= sm.start + sm.labdur).OnlyEnforceIf(lpres)
+                    model.Add(f_lo <= sm.lab_start).OnlyEnforceIf(lpres)
+                    model.Add(f_hi >= sm.lab_start + sm.labdur).OnlyEnforceIf(lpres)
             if len(ivs) > 1:
                 model.AddNoOverlap(ivs)
             fac_intervals[(f, d)] = ivs
@@ -1639,7 +1746,7 @@ def build_schedule_cpsat(
             demands.append(1)
             if sm.lab_min > 0:
                 ivs.append(model.NewOptionalIntervalVar(
-                    sm.start, sm.labdur, sm.lab_end, sm.labday[d],
+                    sm.lab_start, sm.labdur, sm.lab_end, sm.labday[d],
                     f"ccl[{sm.sec.id}][{d}]"))
                 demands.append(1)
         model.AddCumulative(ivs, demands, MAX_CONCURRENT)
@@ -1658,8 +1765,8 @@ def build_schedule_cpsat(
         for lit, (pat, slot) in zip(sm.sel, sm.combos):
             c14.setdefault((cn, tuple(sorted(pat)), t2m(slot.start), t2m(slot.stop)),
                            []).append(lit)
-        for lit, (day, slot) in zip(sm.lab_sel, sm.lab_combos):
-            c14.setdefault((cn, (day,), t2m(slot.start), t2m(slot.stop)),
+        for lit, (ldays, slot) in zip(sm.lab_sel, sm.lab_combos):
+            c14.setdefault((cn, tuple(sorted(ldays)), t2m(slot.start), t2m(slot.stop)),
                            []).append(lit)
     c14_total: Dict[str, int] = {}
     for s in sections:
@@ -1733,8 +1840,9 @@ def build_schedule_cpsat(
     # coefficients as small as the ordering allows.
     n_sec = len(sms)
     ug = [sm for sm in sms if not sm.grad]
-    ug_meetings = sum(sm.n_days + (1 if sm.lab_min > 0 else 0) for sm in ug)
-    all_meetings = sum(sm.n_days + (1 if sm.lab_min > 0 else 0) for sm in sms)
+    # A lab block counts once per lab meeting (1 for the 3-2-4 offering).
+    ug_meetings = sum(sm.n_days + sm.n_labs for sm in ug)
+    all_meetings = sum(sm.n_days + sm.n_labs for sm in sms)
 
     soft_terms = []          # (weight, expression) pairs, tier 3
     soft_ub = 0
@@ -1746,9 +1854,9 @@ def build_schedule_cpsat(
         for lit, (pat, slot) in zip(sm.sel, sm.combos):
             if slot.start.hour < AM_CUTOFF_HR:
                 am_expr.append(len(pat) * lit)
-        for lit, (_d, slot) in zip(sm.lab_sel, sm.lab_combos):
+        for lit, (ldays, slot) in zip(sm.lab_sel, sm.lab_combos):
             if slot.start.hour < AM_CUTOFF_HR:
-                am_expr.append(lit)
+                am_expr.append(len(ldays) * lit)
     if am_expr or am_target:
         am_dev = model.NewIntVar(0, max(ug_meetings, am_target), "am_dev")
         model.Add(am_dev >= sum(am_expr) - am_target)
@@ -1990,7 +2098,7 @@ def build_schedule_cpsat(
     sys.stdout.flush()
 
     # ── read the solution back ───────────────────────────────────────────────
-    # placement[section_id] = (faculty, days, lec_slot, lab_day|None, lab_slot|None)
+    # placement[section_id] = (faculty, days, lec_slot, lab_days|None, lab_slot|None)
     placement: Dict[str, Tuple] = {}
     unplaced_ids: List[str] = []
     for sm in sms:
@@ -2003,16 +2111,16 @@ def build_schedule_cpsat(
             unplaced_ids.append(sid)
             continue
         pat, slot = pick
-        lab_day = lab_slot = None
+        lab_days = lab_slot = None
         if sm.lab_min > 0:
             lab_pick = next((c for lit, c in zip(sm.lab_sel, sm.lab_combos)
                              if solver.Value(lit)), None)
             if lab_pick is None:
                 unplaced_ids.append(sid)
                 continue
-            lab_day, lab_slot = lab_pick
+            lab_days, lab_slot = list(lab_pick[0]), lab_pick[1]
         fac = next((f for f, v in sm.y.items() if solver.Value(v)), "TBA")
-        placement[sid] = (fac, list(pat), slot, lab_day, lab_slot)
+        placement[sid] = (fac, list(pat), slot, lab_days, lab_slot)
 
     return _materialise_cpsat(
         sms, placement, unplaced_ids, fac_prefs, faculty_limits,
@@ -2060,12 +2168,12 @@ def _materialise_cpsat(
     for sid in sorted(placement, key=lambda s: (by_id[s].sec.course_number, s)):
         sm = by_id[sid]
         sec = sm.sec
-        fac, days, slot, lab_day, lab_slot = placement[sid]
+        fac, days, slot, lab_days, lab_slot = placement[sid]
 
         room = room_assigner.find_and_book(sec, days, slot.start, slot.stop, is_lab=False)
         lab_room = None
         if lab_slot is not None:
-            lab_room = room_assigner.find_and_book(sec, [lab_day], lab_slot.start,
+            lab_room = room_assigner.find_and_book(sec, lab_days, lab_slot.start,
                                                    lab_slot.stop, is_lab=True)
         # RoomAssigner returns None only when rooms.csv has no room of the
         # required Type at all — a data problem, not a scheduling one.
@@ -2079,7 +2187,7 @@ def _materialise_cpsat(
 
         time_sched.book(fac, days, slot)
         if lab_slot is not None:
-            time_sched.book(fac, [lab_day], lab_slot)
+            time_sched.book(fac, lab_days, lab_slot)
         faculty_load[fac] = faculty_load.get(fac, 0) + 1
         _tally(fac, sec.course_number, +1)
         faculty_days_map.setdefault(fac, set()).update(days)
@@ -2102,12 +2210,14 @@ def _materialise_cpsat(
             days_per_week=sm.n_days, forced=False, topup=is_topup,
         )
         if lab_slot is not None:
-            faculty_days_map[fac].add(lab_day)
+            faculty_days_map[fac].update(lab_days)
             labs.append(ScheduledSection(
                 section_id=f"{sid}-LAB", course_number=sec.course_number,
                 course_name=sec.course_name, faculty=fac, room=lab_room,
-                days=[lab_day], start_time=lab_slot.start, end_time=lab_slot.stop,
+                days=list(lab_days), start_time=lab_slot.start, end_time=lab_slot.stop,
                 has_lab=False, is_lab=True, forced=False, topup=is_topup,
+                days_per_week=max(sm.n_labs, 1),
+                meeting_min=lab_meeting_min(sm.lab_min, sm.n_labs),
             ))
 
     # ── 2. placeholders for whatever could not be placed ─────────────────────
@@ -2138,15 +2248,17 @@ def _materialise_cpsat(
             days_per_week=sm.n_days, forced=True,
         )
         if sm.lab_min > 0:
-            lab_day, lab_slot = _placeholder_lab(sm, days_f, slot_f, time_sched)
-            time_sched.book_placeholder([lab_day], lab_slot)
+            lab_days, lab_slot = _placeholder_lab(sm, days_f, slot_f, time_sched)
+            time_sched.book_placeholder(lab_days, lab_slot)
             unplaced_report.append((f"{sid}-LAB", sec.course_number,
                                     "its lecture could not be placed"))
             labs.append(ScheduledSection(
                 section_id=f"{sid}-LAB", course_number=sec.course_number,
                 course_name=sec.course_name, faculty="TBA", room="UNPLACED",
-                days=[lab_day], start_time=lab_slot.start, end_time=lab_slot.stop,
+                days=list(lab_days), start_time=lab_slot.start, end_time=lab_slot.stop,
                 has_lab=False, is_lab=True, forced=True,
+                days_per_week=max(sm.n_labs, 1),
+                meeting_min=lab_meeting_min(sm.lab_min, sm.n_labs),
             ))
 
     # ── 3. explain every TBA in plain English, as the greedy engine does ─────
@@ -2215,17 +2327,18 @@ def _placeholder_slot(sm: "_SecModel", time_sched: TimeSlotScheduler) -> Tuple[L
 
 
 def _placeholder_lab(sm: "_SecModel", lec_days: List[str], lec_slot: TimeSlot,
-                     time_sched: TimeSlotScheduler) -> Tuple[str, TimeSlot]:
-    """Placeholder day/slot for the lab of a placeholder lecture. Keeps C9 (a
-    different day) and C17 (the same start) where it can, so the placeholder at
-    least looks like the class it stands in for."""
-    same_start = [c for c in sm.lab_combos
-                  if t2m(c[1].start) == t2m(lec_slot.start) and c[0] not in lec_days]
-    pool = same_start or [c for c in sm.lab_combos if c[0] not in lec_days] or sm.lab_combos
+                     time_sched: TimeSlotScheduler) -> Tuple[List[str], TimeSlot]:
+    """Placeholder day(s)/slot for the lab block of a placeholder lecture. Keeps
+    C9 (no lecture day) and, for a single lab, C17 (the same start) where it
+    can, so the placeholder at least looks like the class it stands in for."""
+    off_lecture = [c for c in sm.lab_combos if not set(c[0]) & set(lec_days)]
+    same_start = [c for c in off_lecture if t2m(c[1].start) == t2m(lec_slot.start)]
+    pool = (same_start if sm.n_labs <= 1 else []) or off_lecture or sm.lab_combos
     if not pool:
-        day = next((d for d in ALL_DAYS if d not in lec_days), ALL_DAYS[0])
-        return day, lec_slot
-    return min(pool, key=lambda c: time_sched.placeholder_pressure([c[0]], c[1]))
+        free = [d for d in ALL_DAYS if d not in lec_days]
+        return (free[:max(sm.n_labs, 1)] or [ALL_DAYS[0]]), lec_slot
+    best = min(pool, key=lambda c: time_sched.placeholder_pressure(list(c[0]), c[1]))
+    return list(best[0]), best[1]
 
 
 def _diagnose_cpsat_placement(sm: "_SecModel", time_sched: TimeSlotScheduler) -> str:
@@ -2245,15 +2358,23 @@ def _diagnose_cpsat_placement(sm: "_SecModel", time_sched: TimeSlotScheduler) ->
                 f"{', '.join(str(d) for d in have)} minute slots. Either add a "
                 f"{per_day}-minute row to timings.csv, or change this course's "
                 f"meeting length in meeting_patterns.csv")
+    if sm.n_labs > 1 and sm.n_days + sm.n_labs > len(ALL_DAYS):
+        return (f"TIMING — this course meets {sm.n_days} lecture day(s) plus "
+                f"{sm.n_labs} lab meetings, each on its own weekday, which needs "
+                f"{sm.n_days + sm.n_labs} days; the week has {len(ALL_DAYS)}. Lower "
+                f"lab_meetings_per_week in meeting_patterns.csv or the lecture days "
+                f"in the course list")
     if sm.lab_min > 0 and not sm.lab_combos:
-        return (f"TIMING — this course needs a {sm.lab_min}–{LAB_MAX_MIN} minute lab "
-                f"slot and timings.csv offers none that a lab may use")
+        lab_max = lab_max_minutes(sm.lab_min)
+        span = f"{sm.lab_min}" if lab_max == sm.lab_min else f"{sm.lab_min}–{lab_max}"
+        return (f"TIMING — this course needs {max(sm.n_labs, 1)} lab meeting(s) of "
+                f"{span} minutes and timings.csv offers no slot that a lab may use")
     if not sm.combos:
         return (f"TIMING — {per_day}-minute slots exist but none is legal for this "
                 f"course once the reserved Tue/Thu 12:00-13:00 hour, each slot's "
                 f"'Days Allowed' column"
                 + (", and the requirement that its lab start at the same clock time"
-                   if sm.lab_min > 0 else "")
+                   if sm.lab_min > 0 and sm.n_labs <= 1 else "")
                 + " are applied")
     return (f"CAPACITY — {len(sm.combos)} legal (day pattern, slot) combination(s) "
             f"exist for this section, but the solver could not use any of them "
@@ -2385,7 +2506,10 @@ def _topup_underloaded_cpsat(
         new_days = set(faculty_days_map.get(fac, set())) | set(lec.days)
         if lab:
             new_days |= set(lab.days)
-        if len(new_days) > teaching_day_allowance(lec.days, lab.days if lab else None):
+        # Lecture and lab days together: a course that itself needs more days
+        # than the cap (a 1-day lecture with three lab days needs four)
+        # raises the allowance, exactly as the lab search and C4 compute it.
+        if len(new_days) > teaching_day_allowance(list(lec.days) + (list(lab.days) if lab else [])):
             return False                                                       # C4
         if not time_sched._faculty_free(fac, lec.days, lec.start_time, lec.end_time):
             return False                                                       # gap
@@ -2592,14 +2716,14 @@ class ConstraintChecker:
             ("C5  No blank faculty field",                      self._c5_assigned),
             ("C7  Lecture/lab duration matches an available slot", self._c7_durations),
             ("C9  Lab on different day than lecture",           self._c9_lab_day),
-            ("C10 Lab is exactly one day",                      self._c10_lab_one_day),
+            ("C10 Lab meets its declared number of distinct days", self._c10_lab_one_day),
             (f"C11 ≤ {MAX_CONCURRENT} concurrent sections per time slot", self._c11_concurrency),
             ("C12 Graduate courses start at 6 PM (18:00)",       self._c12_grad_time),
             ("C13 Same faculty for lecture and its lab",        self._c13_lab_faculty),
             (same_time_label(),                                  self._c14_time_dupes),
             ("C15 Lecture meets its declared days/week",         self._c15_patterns),
             ("C16 Sections balanced across weekdays (≤ 40 %)",  self._c16_balance),
-            ("C17 Lab starts at the same time as its lecture",   self._c17_lab_same_start),
+            ("C17 Single lab starts at the same time as its lecture", self._c17_lab_same_start),
             ("C18 ≤ 2 graduate sections per faculty",            self._c18_grad_per_faculty),
             ("C19 Faculty preference honored (hard constraint)", self._c19_pref_honored),
         ]
@@ -2675,10 +2799,19 @@ class ConstraintChecker:
         of their own courses meets more days than that, in which case that course
         sets the floor. Uses the same helper the scheduler does."""
         fac_days: Dict[str, set] = {}
-        fac_courses: Dict[str, List[List[str]]] = {}
-        for s in sections.values():
+        # A section's lecture and its lab are one course for this purpose: the
+        # allowance is raised by a course that ITSELF needs more days than the
+        # cap, and a 1-day lecture with three lab days needs four. Grouping by
+        # section id (lab entries share their lecture's) is what the scheduler's
+        # own lab search has always assumed.
+        sec_days: Dict[Tuple[str, str], set] = {}
+        for sid, s in sections.items():
             fac_days.setdefault(s.faculty, set()).update(s.days)
-            fac_courses.setdefault(s.faculty, []).append(list(s.days))
+            base = sid[:-4] if sid.endswith("-LAB") else sid
+            sec_days.setdefault((s.faculty, base), set()).update(s.days)
+        fac_courses: Dict[str, List[List[str]]] = {}
+        for (fac, _base), ds in sec_days.items():
+            fac_courses.setdefault(fac, []).append(sorted(ds))
         ok = True
         for fac, days in fac_days.items():
             if fac == "TBA":
@@ -2708,7 +2841,11 @@ class ConstraintChecker:
                 print(f"    {sid}: {dur} min matches no slot in timings.csv "
                       f"(available: {', '.join(str(d) for d in self.valid_durations)})")
                 ok = False
-            elif s.is_lab and not (100 <= dur <= 110):
+            elif s.meeting_min and dur != s.meeting_min:
+                print(f"    {'LAB ' if s.is_lab else ''}{sid}: {dur} min "
+                      f"(meeting_patterns.csv says {s.meeting_min})")
+                ok = False
+            elif s.is_lab and not s.meeting_min and not (100 <= dur <= 110):
                 print(f"    LAB {sid}: {dur} min (expect 105)")
                 ok = False
             elif is_grad(s.course_number) and not (145 <= dur <= 165):
@@ -2730,10 +2867,20 @@ class ConstraintChecker:
         return ok
 
     def _c10_lab_one_day(self, sections, _):
+        """A lab block meets on exactly as many DISTINCT days as it has lab
+        meetings: one for an ordinary lab, more when meeting_patterns.csv gives
+        the course several (`days_per_week` on the lab entry; 0 = 1). Two lab
+        meetings on the same day, or one too few, both fail here."""
         ok = True
         for sid, s in sections.items():
-            if s.is_lab and len(s.days) > 1:
-                print(f"    {sid}: lab on multiple days {s.days}")
+            if not s.is_lab:
+                continue
+            want = s.days_per_week or 1
+            if len(s.days) != len(set(s.days)):
+                print(f"    {sid}: two lab meetings on the same day {s.days}")
+                ok = False
+            elif len(s.days) != want:
+                print(f"    {sid}: lab meets {len(s.days)} day(s) {s.days}, expected {want}")
                 ok = False
         return ok
 
@@ -2842,9 +2989,15 @@ class ConstraintChecker:
         return ok
 
     def _c17_lab_same_start(self, sections, _):
+        """Applies to the single weekly lab of the 3-2-4 offering. A course with
+        several lab meetings (the 1-6-4 senior project) is exempt: its lab block
+        is the bulk of the course, of a different length from its lecture, and
+        is scheduled as a meeting pattern of its own."""
         ok = True
         for sid, s in sections.items():
             if not s.is_lab or not s.start_time:
+                continue
+            if (s.days_per_week or 1) > 1:
                 continue
             base = sid.replace("-LAB", "")
             if base not in sections:

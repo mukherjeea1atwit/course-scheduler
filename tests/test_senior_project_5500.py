@@ -210,9 +210,10 @@ class CpsatEndToEnd(_EndToEnd, SchedulerTestCase):
 # ── an unplaceable 5500 is not parked in the grad evening slot ──────────────
 
 class UnplaceableSeniorProjectPlaceholder(SchedulerTestCase):
-    """COMP5500 ships as 1 day x 3 h = a 180-min meeting, which no undergraduate
-    slot offers. It must be reported UNPLACED, and its invented placeholder time
-    must not be the 18:00 grad evening slot (that read as 'still grad')."""
+    """A 5500 declared as 1 day x 3 h (COMP5500's course-list row before it became
+    the 1-6-4 offering) needs a 180-min meeting, which no undergraduate slot
+    offers. It must be reported UNPLACED, and its invented placeholder time must
+    not be the 18:00 grad evening slot (that read as 'still grad')."""
 
     FIX = dict(
         courses=course_list(["COMP5500,Senior Project,1,3,0,1,"]),

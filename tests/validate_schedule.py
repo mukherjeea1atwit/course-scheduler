@@ -181,9 +181,16 @@ for r in rows("meeting_patterns"):
         v = (r.get(k) or "").strip()
         return float(v) if v else None
     subj = (r.get("subject") or "").strip()
+    # lab_meetings_per_week is optional: a missing column or blank cell means the
+    # historical single weekly lab.
+    try:
+        labn = int(float((r.get("lab_meetings_per_week") or "").strip() or 1))
+    except ValueError:
+        labn = 1
     MPATS.append(dict(subject=None if subj in ("", "*") else subj.upper(),
                       days=_f("lecture_days_per_week"), lec_h=_f("lecture_hours"),
-                      meet=_f("meeting_minutes"), lab=_f("lab_minutes")))
+                      meet=_f("meeting_minutes"), lab=_f("lab_minutes"),
+                      labn=labn if 1 <= labn <= len(DAYS) else 1))
 
 GROUPS = defaultdict(list)
 for r in rows("non_overlap_groups"):
@@ -648,6 +655,60 @@ report(15, "SAME COURSE AT THE SAME TIME (C14)", v,
        [f"max_same_time_sections = "
         + (f"{float(pct):g}% of each course's sections, rounded half up, min 1"
            if pct is not None else str(max(1, count)))])
+
+# ── 16. LAB MEETINGS ─────────────────────────────────────────────────────────
+# Every placed undergraduate section of a course with lab hours has ONE "-LAB"
+# entry whose meetings are on exactly lab_meetings_per_week DISTINCT days
+# (meeting_patterns.csv; 1 when blank, missing, or no rule matches), none of them
+# a lecture day, taught by the lecture's professor. A multi-lab course's labs
+# must also each last the rule's lab_minutes. Re-derived from the inputs only.
+v, info = [], []
+lab_ev = defaultdict(list)
+for e in EV:
+    if e["isLab"]:
+        lab_ev[e["seckey"]].append(e)
+multi = []
+for k, lec_evs in sorted(lect.items()):
+    cn = course_of(k)
+    c = COURSES.get(cn, {})
+    if is_grad(cn) or not (c.get("lab_h") or 0) > 0:
+        if lab_ev.get(k) and is_grad(cn):
+            v.append(f"{k} (grad): has lab meetings, but graduate courses have no lab")
+        continue
+    if any(x["ph"] for x in lec_evs) or any(x["ph"] for x in lab_ev.get(k, [])):
+        continue                      # placeholder times are invented; check 12 owns them
+    rule = rule_for(cn, c.get("days"), c.get("lec_h"))
+    want = rule["labn"] if rule else 1
+    labs = lab_ev.get(k, [])
+    lab_days = [x["day"] for x in labs]
+    lec_days = {x["day"] for x in lec_evs}
+    if not labs:
+        v.append(f"{k}: course has lab hours but no lab meeting was scheduled")
+        continue
+    ids = sorted({x["id"] for x in labs})
+    if len(ids) != 1:
+        v.append(f"{k}: lab meetings are split across several ids {ids}; expected one -LAB entry")
+    if len(lab_days) != len(set(lab_days)):
+        v.append(f"{k}: two lab meetings on the same day {sorted(lab_days)}")
+    if len(set(lab_days)) != want:
+        v.append(f"{k}: {len(set(lab_days))} lab meeting day(s) {sorted(set(lab_days))}, "
+                 f"meeting_patterns.csv says {want}")
+    clash = sorted(set(lab_days) & lec_days)
+    if clash:
+        v.append(f"{k}: lab meets on lecture day(s) {clash}")
+    profs = {x["prof"] for x in labs} | {x["prof"] for x in lec_evs}
+    if len(profs) != 1:
+        v.append(f"{k}: lecture and labs taught by different people {sorted(profs)}")
+    if want > 1:
+        multi.append(f"{k}: lecture {''.join(sorted(lec_days, key=DAYS.index))} "
+                     f"{lec_evs[0]['start']}, labs {''.join(sorted(set(lab_days), key=DAYS.index))} "
+                     f"{labs[0]['start']}-{labs[0]['end']}")
+        durs = sorted({x["e"] - x["s"] for x in labs})
+        if rule and rule.get("lab") and durs != [int(rule["lab"])]:
+            v.append(f"{k}: lab meetings last {durs} min, meeting_patterns.csv says "
+                     f"{int(rule['lab'])}")
+info.append(f"multi-lab sections ({len(multi)}): " + ("; ".join(multi) if multi else "none"))
+report(16, "LAB MEETINGS (count, distinct days, off lecture days, same professor)", v, info)
 
 # ── summary ──────────────────────────────────────────────────────────────────
 print("\n" + "=" * 78)
