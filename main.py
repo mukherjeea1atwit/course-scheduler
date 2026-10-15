@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 # Scheduling rules enforced below:
 #  • Faculty preference is a HARD constraint — a section is only assigned to a
 #    prof listed in its preference row; otherwise it goes to TBA. (faculty_candidates)
-#  • ≤ 2 graduate (5000+) sections per professor.                        (can_assign)
+#  • ≤ 2 graduate (5000+, not 5500) sections per professor.            (can_assign)
 #  • Load balancing: within the preferred pool the most-underloaded prof (relative
 #    to their target load) is tried first, so sections spread toward every prof's
 #    target instead of piling onto whoever is listed first.       (faculty_candidates)
@@ -215,9 +215,25 @@ def normalize(course_number: str) -> str:
     return (course_number or "").replace(" ", "").strip()
 
 
-def is_grad(course_number: str) -> bool:
+# Course numbers at or above GRAD_MIN_NUMBER are graduate courses, EXCEPT the
+# numbers in UNDERGRAD_EXCEPTIONS. 5500 is the senior project / senior design
+# course in every subject (COMP5500, CYBR5500, DATA5500, AAIN5500, ...): it is
+# always taken by undergraduates, so it follows undergraduate rules — daytime
+# slots, labs, AM/PM balance, no 18:00 evening session, no 2-grad-section cap.
+# tests/validate_schedule.py mirrors these two constants; keep them in step.
+GRAD_MIN_NUMBER = 5000
+UNDERGRAD_EXCEPTIONS = frozenset({5500})
+
+
+def course_number_value(course_number: str) -> int:
+    """First run of digits in a course number ('COMP5500' -> 5500), or 0."""
     m = re.search(r"(\d+)", course_number or "")
-    return bool(m and int(m.group(1)) >= 5000)
+    return int(m.group(1)) if m else 0
+
+
+def is_grad(course_number: str) -> bool:
+    n = course_number_value(course_number)
+    return n >= GRAD_MIN_NUMBER and n not in UNDERGRAD_EXCEPTIONS
 
 
 # Scheduling tiers, most-constrained first. Upper-level undergraduate courses
@@ -226,15 +242,15 @@ def is_grad(course_number: str) -> bool:
 # before anything else. Graduate courses come next — they all compete for the
 # single 18:00 evening slot. Lower-level undergraduate courses (1000/2000) go
 # last: they have the largest faculty pools and the most sections, so they are
-# the easiest to place around whatever is already fixed.
+# the easiest to place around whatever is already fixed. Senior project (5500,
+# see UNDERGRAD_EXCEPTIONS) is undergraduate, so it joins the upper-level tier.
 LEVEL_UPPER_UG, LEVEL_GRAD, LEVEL_LOWER_UG = 0, 1, 2
 
 
 def course_level_tier(course_number: str) -> int:
     """Scheduling tier for a course number — see LEVEL_* above."""
-    m = re.search(r"(\d+)", course_number or "")
-    num = int(m.group(1)) if m else 0
-    if num >= 5000:
+    num = course_number_value(course_number)
+    if is_grad(course_number):
         return LEVEL_GRAD
     if num >= 3000:
         return LEVEL_UPPER_UG
@@ -1279,7 +1295,7 @@ def build_schedule(
             return False
         if fac_course_count.get((fac, sec.course_number), 0) >= 2:          # C3
             return False
-        # ≤ 2 graduate (5000+) sections per professor, across all grad courses.
+        # ≤ 2 graduate sections (is_grad) per professor, across all grad courses.
         if is_grad(sec.course_number) and fac_grad_count.get(fac, 0) >= 2:  # C18
             return False
         return True
@@ -1762,7 +1778,10 @@ def build_schedule(
             if not base_cands:  # PM filter left nothing — better a placed AM section than none
                 base_cands = time_sched._eligible_slots(sec, per_day_f, force_pm=False, max_duration=None)
             if not base_cands:  # nothing long enough at all — take the longest slot there is
-                base_cands = sorted(time_sched.slots, key=lambda s: -s.duration_min)[:1]
+                # on the section's own side of the grad/undergrad split, so an
+                # undergraduate placeholder is not parked in the grad evening slot.
+                pool = time_sched._eligible_slots(sec, 0, force_pm=False) or time_sched.slots
+                base_cands = sorted(pool, key=lambda s: -s.duration_min)[:1]
 
             days_f, slot_f, best_load = pattern_pool[0], None, None
             for cand_days in pattern_pool:
@@ -2715,7 +2734,7 @@ def print_summary(
 
     grad = {sid: s for sid, s in sections.items() if is_grad(s.course_number) and s.start_time}
     if grad:
-        print("══════════════ GRADUATE (5000+) TIMINGS ════════════")
+        print("══════════════ GRADUATE (5000+ excl. 5500) TIMINGS ══════")
         by_course: Dict[str, list] = {}
         for sid, s in grad.items():
             by_course.setdefault(s.course_number, []).append((sid, s))

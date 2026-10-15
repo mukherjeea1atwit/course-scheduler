@@ -62,6 +62,7 @@ COMP5705,Data Mining,"Salem, Memo, Bingyu, Zaihan"
 COMP5750,Embedded AI,Memo
 COMP5775,Adv. Parallel Computing,Micah
 COMP6100,Secure Software Development,Aspen
+COMP6500,Adv. Network Security,Cliff
 COMP6710,Principles of Machine Learning,"Salem, Aspen, Steve, Memo"
 COMP6720,Natural Language Processing,"Yetunde, Salem, Memo, Zaihan"
 COMP6760,Computer Vision,Memo
@@ -90,7 +91,6 @@ CYBR5730,Secure Computation,Abdullah
 CYBR5740,Adversarial Robustness in ML,Bingyu
 CYBR6000,Intrusion Det. & Prev. Systems,Abdullah
 CYBR6420,Reverse Engineering,Abdullah
-CYBR6500,Adv. Network Security,Cliff
 CYBR6520,Malware Analysis,Abdullah
 CYBR6550,Threat Intelligence,Abdullah 
 CYBR6580,Digital For. & Incidence Response,Ashar

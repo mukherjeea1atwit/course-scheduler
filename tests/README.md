@@ -12,6 +12,7 @@ Stdlib `unittest` only — no install needed. `pytest` also runs them if you pre
 |---|---|
 | `test_units.py` | Pure helpers: day patterns, meeting-length rules, section-id parsing, settings loading |
 | `test_scheduling.py` | End-to-end behaviour: days/week, meeting length, grad rules, faculty roster, unplaced sections, concurrency |
+| `test_senior_project_5500.py` | 5500 (senior project, any subject) is undergraduate: both engines, both checkers and `validate_schedule.py`; other 5000+ stay grad |
 | `test_inputs_and_exports.py` | The INPUT CHECK report and both CSV exports |
 | `test_server.py` | API endpoints, save round-trip, save failure messages |
 | `test_shipped.py` | The data in `data/` schedules cleanly; static checks on the UI |

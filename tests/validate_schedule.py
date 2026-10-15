@@ -73,8 +73,15 @@ def course_num(cn):
     return int(m.group(1)) if m else -1
 
 
+# Mirrors main.py / main_cpsat.py: >= 5000 is graduate, except 5500 — the
+# senior project course in every subject, which is always undergraduate.
+GRAD_MIN_NUMBER = 5000
+UNDERGRAD_EXCEPTIONS = frozenset({5500})
+
+
 def is_grad(cn):
-    return course_num(cn) >= 5000
+    n = course_num(cn)
+    return n >= GRAD_MIN_NUMBER and n not in UNDERGRAD_EXCEPTIONS
 
 
 def subject_of(cn):

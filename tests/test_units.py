@@ -106,7 +106,7 @@ class MeetingRules(unittest.TestCase):
         self.assertEqual(main.meeting_minutes("MATH1525", 5, 4), 70)
 
     def test_grad_ignores_the_table(self):
-        self.assertEqual(main.meeting_minutes("COMP5500", 3, 1), main.GRAD_MEETING_MIN)
+        self.assertEqual(main.meeting_minutes("COMP5200", 3, 1), main.GRAD_MEETING_MIN)
 
     def test_lab_minutes_follow_the_matching_rule(self):
         self.assertEqual(main.lab_minutes("COMP1000", 3, 2, 2), 105)
