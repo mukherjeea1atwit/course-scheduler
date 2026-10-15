@@ -64,7 +64,7 @@ per section. It is expressed entirely as data, so any future course can do the s
   column (blank or absent = 1) gives the lab count; `meeting_minutes` and `lab_minutes`
   give the lengths.
 - `timings.csv`: `lec_60` and `lab_120` rows at every daytime start (08:00, 10:00, 13:00,
-  15:00, 17:15), Monday–Friday. No existing course uses those lengths, so other courses
+  15:00, 17:15), Monday–Friday except 17:15, which is Monday–Thursday (no Friday evening classes; true of every 17:15 slot). No existing course uses those lengths, so other courses
   are unaffected.
 
 Rules (working assumptions; the client has not confirmed them — each is one place to

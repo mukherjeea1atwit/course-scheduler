@@ -137,9 +137,6 @@ class ShippedDataFiles(unittest.TestCase):
         """GRAD_SINGLE_DAY_PATTERNS omits Friday because no Friday grad evening
         exists. If a Friday grad slot were ever added, grad courses could never
         use it and nothing would say why.
-
-        Note this is only about the grad (18:00) session — the 17:15 daytime
-        slots deliberately do run on Friday.
         """
         import main
         grad = [s for s in main.load_timeslots(str(REPO / "data" / "timings.csv"))
@@ -155,6 +152,15 @@ class ShippedDataFiles(unittest.TestCase):
         import main
         for s in main.load_timeslots(str(REPO / "data" / "timings.csv")):
             if s.duration_min == 70 and s.start.hour >= 17:
+                self.assertNotIn("F", s.days_allowed or [],
+                                 msg=f"{s.label} {s.start} allows Friday")
+
+    def test_no_slot_runs_into_friday_evening(self):
+        """Mike: no Friday evening classes. Every 17:15 slot used to allow
+        Friday except the 70-minute one, and a COMP4960 landed at F 17:15."""
+        import main
+        for s in main.load_timeslots(str(REPO / "data" / "timings.csv")):
+            if s.start.hour >= 17:
                 self.assertNotIn("F", s.days_allowed or [],
                                  msg=f"{s.label} {s.start} allows Friday")
 
