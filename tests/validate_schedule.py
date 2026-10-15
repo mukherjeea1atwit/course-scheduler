@@ -17,8 +17,9 @@ Checks that PASS/FAIL are hard rules. Anything reported as "INFO" is an
 observation that is expected, sanctioned, or stricter than the design requires,
 and never affects the exit code.
 """
-import csv, json, os, re, sys, itertools
+import csv, json, math, os, re, sys, itertools
 from collections import defaultdict
+from fractions import Fraction
 
 # ── run directory ────────────────────────────────────────────────────────────
 RUN = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.getcwd()
@@ -99,6 +100,31 @@ MAX_DAYS = int(SETTINGS["max_teaching_days"])
 GAP_MIN = int(SETTINGS["faculty_gap_minutes"])
 DEFAULT_LOAD = int(SETTINGS.get("default_faculty_load", 3))
 
+
+def _same_time_setting(raw):
+    """max_same_time_sections -> (count, percent-or-None). Re-derived here rather
+    than imported: "2" is a count, "25%" a share of the course's sections, and
+    anything unusable falls back to the default 2, as both engines do."""
+    s = (raw or "2").strip()
+    pct = s.endswith("%")
+    if pct:
+        s = s[:-1].strip()
+    if pct and re.fullmatch(r"\d+(\.\d+)?", s) and Fraction(s) <= 100:
+        return 0, Fraction(s)
+    if not pct and re.fullmatch(r"\d+", s) and int(s) <= 1000:
+        return int(s), None
+    return 2, None
+
+
+SAME_TIME = _same_time_setting(SETTINGS.get("max_same_time_sections"))
+
+
+def same_time_cap(nsec):
+    count, pct = SAME_TIME
+    if pct is None:
+        return max(1, count)
+    return max(1, math.floor(pct * nsec / 100 + Fraction(1, 2)))     # half up
+
 PREF = {}
 for r in rows("prof_preferences"):
     cn = ncourse(r.get("Course Number"))
@@ -111,6 +137,7 @@ for r in rows("rooms"):
     ROOMS[r["Room"].strip()] = (r["Type"].strip(), int(float(r["Capacity"] or 0)))
 
 COURSES = {}
+NSEC = {}
 for r in rows("course-list"):
     cn = ncourse(r.get("Course number"))
     if not cn:
@@ -124,6 +151,8 @@ for r in rows("course-list"):
             return None
     COURSES[cn] = dict(days=_f("lecture days per week"), lec_h=_f("lecture hours"),
                        lab_h=_f("lab hours"), nsec=_f("number of sections"))
+    # Summed, not overwritten: a course listed on two rows offers both rows' sections.
+    NSEC[cn] = NSEC.get(cn, 0) + int(_f("number of sections") or 0)
 
 SLOTS = []
 for r in rows("timings"):
@@ -582,6 +611,36 @@ if rooms_held:
 report(14, "PLACEHOLDERS DO NOT CONSUME THE CONCURRENCY / ROOM BUDGET", v,
        [f"placed-only peak = {PK_PLACED[0]} (cap {MAX_CONCURRENT}); "
         f"placeholder-inclusive peak = {PK_ALL[0]}"])
+
+# ── 15. SAME COURSE AT THE SAME TIME (C14) ───────────────────────────────────
+# One meeting per section: its sorted day-set and start/end. Lectures and labs
+# are counted apart (a lab is its own one-day meeting). The cap comes from
+# max_same_time_sections and, as a percentage, is taken of the course-list
+# "number of sections" — falling back to the sections seen in schedule.json.
+meet = defaultdict(lambda: dict(days=set()))
+for e in PLACED:
+    m = meet[e["id"]]
+    m["days"].add(e["day"])
+    m.update(cn=e["cn"], s=e["s"], e=e["e"], lab=e["id"].upper().endswith("-LAB"))
+seen_secs = defaultdict(set)
+for e in EV:
+    if not e["id"].upper().endswith("-LAB"):
+        seen_secs[e["cn"]].add(e["seckey"])
+stack = defaultdict(list)
+for sid, m in meet.items():
+    days = tuple(d for d in DAYS if d in m["days"])
+    stack[(m["cn"], m["lab"], days, m["s"], m["e"])].append(sid)
+v = []
+for (cn, lab, days, s, e_), sids in sorted(stack.items()):
+    cap = same_time_cap(NSEC.get(cn) or len(seen_secs[cn]))
+    if len(sids) > cap:
+        v.append(f"{cn}{' lab' if lab else ''}: {len(sids)} sections on {'/'.join(days)} "
+                 f"{s//60:02d}:{s%60:02d}-{e_//60:02d}:{e_%60:02d} (cap {cap}): {sorted(sids)}")
+count, pct = SAME_TIME
+report(15, "SAME COURSE AT THE SAME TIME (C14)", v,
+       [f"max_same_time_sections = "
+        + (f"{float(pct):g}% of each course's sections, rounded half up, min 1"
+           if pct is not None else str(max(1, count)))])
 
 # ── summary ──────────────────────────────────────────────────────────────────
 print("\n" + "=" * 78)

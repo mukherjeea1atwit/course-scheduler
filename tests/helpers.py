@@ -120,7 +120,7 @@ def run_scheduler(*, courses: str, prefs: str, loads: str,
         if src_path.exists():
             shutil.copy2(src_path, work / "data" / name)
 
-    (work / "data" / "course-list-Spring 27(Sheet1) (1).csv").write_text(courses, encoding="utf-8")
+    (work / "data" / "course-list.csv").write_text(courses, encoding="utf-8")
     (work / "data" / "prof_preferences.csv").write_text(prefs, encoding="utf-8")
     (work / "data" / "faculty_load.csv").write_text(loads, encoding="utf-8")
     if not (work / "data" / "non_overlap_groups.csv").exists():

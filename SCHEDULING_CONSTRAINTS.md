@@ -31,7 +31,7 @@ and don't have their own numbered check.
 | C11 | **≤ 10 concurrent sections in any time window** | At most 10 classes can be running at once (overlapping start/end), per day, across the whole schedule. | `_slot_capacity_ok()` (~L554); checked by `_c11_concurrency` (~L1204) |
 | C12 | **Graduate (5000+) courses start at 18:00 (6 PM)** | Every grad-level section's lecture begins at 6 PM. | `_eligible_slots()` restricts grad courses to `18:00 ≤ start < 19:00` (~L528); checked by `_c12_grad_time` (~L1222) |
 | C13 | **Lab taught by the same faculty as its lecture** | A course's lab section is never assigned to a different professor than its lecture. | Structural (`fac` reused when booking the lab, ~L1008); checked by `_c13_lab_faculty` (~L1231) |
-| C14 | **≤ 2 sections of the same course at the exact same day/time** | No more than 2 sections of one course number can share an identical (days, start, end). | Not actively filtered during search; checked post-hoc by `_c14_time_dupes` (~L1241) |
+| C14 | **≤ `max_same_time_sections` sections of the same course at the exact same day/time** (default 2) | No more sections of one course number than the cap can share an identical (days, start, end). The cap is set in `settings.csv` as either a whole number (`2`) or a percentage of that course's "number of sections" (`25%`): 25% of 10 sections = 2.5, rounded half up to 3. The cap is never below 1 (`0` and `0%` mean 1); an invalid value (`abc`, `-5`, `150%`) prints a `[WARN]` and uses 2. A course's labs share its cap. | `same_time_cap()` resolves the cap per course. Greedy: `course_time_ok()` in `build_schedule` rejects a slot that would exceed it. CP-SAT: one `sum(lits) <= cap` per (course, days, start, end). Checked by `_c14_time_dupes` in both engines and by check 15 of `tests/validate_schedule.py` |
 | C15 | **Lecture day patterns limited to MW / TTh / WF** | A 2-day lecture only ever meets Mon+Wed, Tue+Thu, or Wed+Fri — no other 2-day combination. | `LECTURE_PATTERNS` is the only pool offered (~L37, `_patterns_for` ~L712); checked by `_c15_patterns` (~L1255) |
 | C17 | **Lab starts at the same clock time as its lecture** | If a course has a lab, the lab's start time (hour:minute) must match the lecture's start time — only the day differs. | `_find_lab_at()` only searches slots with matching `start` (~L757-792); checked by `_c17_lab_same_start` (~L1277) |
 | C18 | **≤ 2 graduate sections per faculty member** | Across *all* 5000+ courses combined, one professor teaches at most 2 grad sections. | `can_assign()` (~L682-689); checked by `_c18_grad_per_faculty` (~L1292) |
@@ -72,7 +72,7 @@ never blocks a schedule from being generated — at worst it's logged as a
 None of the above are hardcoded beyond the rules themselves — the specific numbers
 come from these CSVs in `data/`, editable via the Input Editor UI:
 
-- **`course-list-Spring 27(Sheet1) (1).csv`** — course numbers, names, lecture/lab hours, section counts, preferred room.
+- **`course-list.csv`** — course numbers, names, lecture/lab hours, section counts, preferred room.
 - **`prof_preferences.csv`** — the hard-constraint list of eligible professors per course (C19).
 - **`faculty_load.csv`** — each professor's target course load (C1), plus an optional `Time Preference` column (`AM`, `PM`, or blank for no preference) used as a soft bias on which half of the day their sections are placed in.
 - **`timings.csv`** — the fixed menu of time slots (start, stop, duration, evening flag, allowed days) the scheduler can ever choose from.

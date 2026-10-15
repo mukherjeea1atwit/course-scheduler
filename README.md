@@ -67,7 +67,7 @@ If you had edited your input files, copy them from the backup folder into the
 
 | File | What it holds |
 |---|---|
-| `course-list-Spring 27(Sheet1) (1).csv` | Your courses, sections, days/week |
+| `course-list.csv` | Your courses, sections, days/week |
 | `prof_preferences.csv` | Who can teach what |
 | `faculty_load.csv` | Teaching loads |
 | `rooms.csv`, `room_preferences.csv` | Your rooms |

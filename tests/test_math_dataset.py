@@ -41,7 +41,7 @@ class MathDataset(unittest.TestCase):
         shutil.copy2(REPO / "main.py", cls.work / "main.py")
         shutil.copytree(REPO / "data", cls.work / "data")
         d = cls.work / "data"
-        shutil.copy2(courses, d / "course-list-Spring 27(Sheet1) (1).csv")
+        shutil.copy2(courses, d / "course-list.csv")
         shutil.copy2(prefs, d / "prof_preferences.csv")
         shutil.copy2(loads, d / "faculty_load.csv")
         if grp:
@@ -67,7 +67,7 @@ class MathDataset(unittest.TestCase):
         """The headline requirement: 'they need to be 3 days'."""
         import csv
         declared = {}
-        with open(self.work / "data" / "course-list-Spring 27(Sheet1) (1).csv",
+        with open(self.work / "data" / "course-list.csv",
                   newline="", encoding="utf-8-sig") as f:
             for r in csv.DictReader(f):
                 num = (r.get("Course number") or "").strip()

@@ -30,7 +30,7 @@ Installing (and re-installing / updating):
 
   IMPORTANT - do not copy back all of them. Copy back only the files
   holding your own data:
-     course-list-*.csv, prof_preferences.csv, faculty_load.csv,
+     course-list.csv, prof_preferences.csv, faculty_load.csv,
      rooms.csv, room_preferences.csv, non_overlap_groups.csv
 
   Leave the NEW versions of these in place:

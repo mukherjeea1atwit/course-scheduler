@@ -14,6 +14,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from datetime import time
+from fractions import Fraction
 from typing import Dict, List, Optional, Tuple
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,6 +94,11 @@ MAX_CONCURRENT  = 10
 MAX_DAY_SPAN_HR = 9         # max hours between a faculty's first and last class
 MAX_TEACHING_DAYS = 4       # max distinct days a professor teaches in a week (C4)
 DEFAULT_FACULTY_LOAD = 3    # load assumed for a name absent from faculty_load.csv
+# C14: how many sections of one course may share a day-set and time. Either a
+# whole number (SAME_TIME_PCT is None) or a percentage of the course's section
+# count, resolved per course by same_time_cap(). Overridden from settings.csv.
+SAME_TIME_MAX   = 2
+SAME_TIME_PCT: Optional[Fraction] = None
 RESERVED_START  = 12 * 60   # Tue/Thu 12:00 reserved (minutes from midnight)
 RESERVED_END    = 13 * 60   # Tue/Thu 13:00 — ends at 1 PM so 1:00 PM slots are free
 AM_CUTOFF_HR    = 12        # hours before this = AM
@@ -516,6 +522,10 @@ SETTING_DEFAULTS: Dict[str, object] = {
     "max_teaching_days": 4,
     "default_faculty_load": 3,
     "am_target_ratio": 0.60,
+    # A whole number ("2") or a percentage of the course's sections ("25%").
+    # Kept as a string because it is not a plain number; parsed by
+    # _parse_same_time() below.
+    "max_same_time_sections": "2",
 }
 
 # Keys that belong to the OTHER engine. settings.csv is one file shared by both
@@ -524,6 +534,46 @@ SETTING_DEFAULTS: Dict[str, object] = {
 # alternative, a [WARN] on every greedy run about a key the user set on purpose,
 # trains people to ignore the warnings that matter.
 FOREIGN_SETTINGS = frozenset({"cpsat_randomize"})
+
+
+def _parse_same_time(raw: str) -> Optional[Tuple[int, Optional[Fraction]]]:
+    """Parse max_same_time_sections into (count, percent).
+
+    "3" -> (3, None); "25%" or " 25 % " -> (0, Fraction(25)). Returns None for
+    anything else — negative, fractional counts, over 100 %, a bare "%", "2x".
+    The percentage is kept as an exact Fraction so 25 % of 10 is exactly 2.5
+    and rounds half up to 3, rather than landing on 2.4999… and rounding down.
+    """
+    s = (raw or "").strip()
+    pct = s.endswith("%")
+    if pct:
+        s = s[:-1].strip()
+    if not re.fullmatch(r"\d+(\.\d+)?" if pct else r"\d+", s):
+        return None
+    if pct:
+        p = Fraction(s)
+        return (0, p) if p <= 100 else None
+    n = int(s)
+    return (n, None) if n <= 1000 else None
+
+
+def same_time_cap(course_sections: int) -> int:
+    """C14 cap for a course offering `course_sections` sections in total.
+
+    A percentage rounds half up (2.5 -> 3; Python's round() would give 2), and
+    the cap is never below 1 — a course must be placeable somewhere.
+    """
+    if SAME_TIME_PCT is None:
+        return max(1, SAME_TIME_MAX)
+    return max(1, math.floor(SAME_TIME_PCT * max(0, course_sections) / 100 + Fraction(1, 2)))
+
+
+def same_time_label() -> str:
+    """The C14 line of the validation report, worded for the mode in force."""
+    if SAME_TIME_PCT is None:
+        n = max(1, SAME_TIME_MAX)
+        return f"C14 ≤ {n} section{'' if n == 1 else 's'} of same course at same time"
+    return f"C14 ≤ {float(SAME_TIME_PCT):g}% of a course's sections at same time"
 
 
 def load_settings(path: str) -> Dict[str, str]:
@@ -535,6 +585,7 @@ def load_settings(path: str) -> Dict[str, str]:
     screen no longer matches the number in force.
     """
     global MAX_CONCURRENT, MAX_DAY_SPAN_HR, FACULTY_GAP_MIN, AM_TARGET_RATIO
+    global SAME_TIME_MAX, SAME_TIME_PCT
     global MAX_TEACHING_DAYS, DEFAULT_FACULTY_LOAD
 
     MAX_CONCURRENT       = int(SETTING_DEFAULTS["max_concurrent_sections"])
@@ -543,6 +594,8 @@ def load_settings(path: str) -> Dict[str, str]:
     MAX_TEACHING_DAYS    = int(SETTING_DEFAULTS["max_teaching_days"])
     DEFAULT_FACULTY_LOAD = int(SETTING_DEFAULTS["default_faculty_load"])
     AM_TARGET_RATIO      = float(SETTING_DEFAULTS["am_target_ratio"])
+    SAME_TIME_MAX, SAME_TIME_PCT = _parse_same_time(
+        str(SETTING_DEFAULTS["max_same_time_sections"]))
 
     out: Dict[str, str] = {}
     if not os.path.exists(path):
@@ -580,6 +633,17 @@ def load_settings(path: str) -> Dict[str, str]:
     MAX_TEACHING_DAYS    = _num("max_teaching_days", int, 1, len(ALL_DAYS), MAX_TEACHING_DAYS)
     DEFAULT_FACULTY_LOAD = _num("default_faculty_load", int, 0, 20, DEFAULT_FACULTY_LOAD)
     AM_TARGET_RATIO      = _num("am_target_ratio", float, 0.0, 1.0, AM_TARGET_RATIO)
+
+    raw = out.get("max_same_time_sections", "")
+    if raw != "":
+        parsed = _parse_same_time(raw)
+        if parsed is None:
+            default = SETTING_DEFAULTS["max_same_time_sections"]
+            print(f"[WARN] settings.csv: max_same_time_sections={raw!r} is not a "
+                  f"whole number or a percentage from 0% to 100% (e.g. 2 or 25%) — "
+                  f"using {default}.")
+        else:
+            SAME_TIME_MAX, SAME_TIME_PCT = parsed
     return out
 
 
@@ -1101,16 +1165,26 @@ def build_schedule(
     fac_course_count: Dict[Tuple[str, str], int] = {}
     fac_grad_count: Dict[str, int] = {}
     # (course, days, start, end) → how many sections already sit there. C14 caps
-    # this at 2: three sections of one course at the same hour on the same days
-    # means no student with a clash has a third option. It was validated after
-    # the run but never enforced during it, so the checker could only report it.
+    # this at same_time_cap() (max_same_time_sections, 2 by default): too many
+    # sections of one course at the same hour on the same days leaves a student
+    # with a clash no other option. It was validated after the run but never
+    # enforced during it, so the checker could only report it.
     course_time_count: Dict[Tuple[str, Tuple[str, ...], int, int], int] = {}
+    # The cap may be a percentage of the course's section count, so resolve it
+    # once per course up front. Lab keys carry a "-LAB" suffix and share the
+    # lecture's cap.
+    course_cap: Dict[str, int] = {}
+    for s in sections:
+        course_cap[s.course_number] = course_cap.get(s.course_number, 0) + 1
+    course_cap = {c: same_time_cap(n) for c, n in course_cap.items()}
 
     def _time_key(course_number: str, days: List[str], slot: "TimeSlot"):
         return (course_number, tuple(sorted(days)), t2m(slot.start), t2m(slot.stop))
 
     def course_time_ok(sec_course: str, days: List[str], slot: "TimeSlot") -> bool:
-        return course_time_count.get(_time_key(sec_course, days, slot), 0) < 2
+        base = sec_course[:-4] if sec_course.endswith("-LAB") else sec_course
+        cap = course_cap.get(base) or same_time_cap(1)
+        return course_time_count.get(_time_key(sec_course, days, slot), 0) < cap
 
     def _tally(fac: str, course_number: str, delta: int) -> None:
         key = (fac, course_number)
@@ -1427,7 +1501,12 @@ def build_schedule(
             if lec_room is None:
                 continue
 
-            if sec.lab_hours == 0:
+            # lab_minutes() is 0 for a graduate course even when the course list
+            # gives it lab hours (grad courses meet one evening session, no lab),
+            # exactly as main_cpsat.py treats it. Keying this on lab_hours made a
+            # grad course with lab hours (DATA5500) hunt for an 18:00 lab slot that
+            # does not exist, so every lecture slot was rejected and it went UNPLACED.
+            if lab_minutes(sec.course_number, sec.lecture_hours, sec.lab_hours, len(days)) == 0:
                 return days, lec_slot, lec_room, None, None, None
 
             lab_info = _find_lab_at(fac, days, lec_slot)
@@ -1713,7 +1792,7 @@ def build_schedule(
             # its own `unplaced` flag said it did not exist, so a consumer that
             # filtered on `room != "UNPLACED"` and one that filtered on `unplaced`
             # disagreed about what was in the room.
-            lab_info_f = _find_lab_at("TBA", days_f, slot_f) if sec.lab_hours > 0 else None
+            lab_info_f = _find_lab_at("TBA", days_f, slot_f) if lab_min > 0 else None
             if lab_info_f:
                 lab_day_f, lab_slot_f, _ = lab_info_f
                 lab_info_f = (lab_day_f, lab_slot_f, "UNPLACED")
@@ -1736,8 +1815,12 @@ def build_schedule(
             time_sched.book(fac, days, slot)
         faculty_load[fac] = faculty_load.get(fac, 0) + 1
         _tally(fac, sec.course_number, +1)
-        _k = _time_key(sec.course_number, days, slot)
-        course_time_count[_k] = course_time_count.get(_k, 0) + 1
+        # A placeholder is not really at that time (C14's checker skips it too), so
+        # it must not use up one of the course's same-time places — with a cap of
+        # 1 it would block a real section from the slot the placeholder invented.
+        if not forced and room != "UNPLACED":
+            _k = _time_key(sec.course_number, days, slot)
+            course_time_count[_k] = course_time_count.get(_k, 0) + 1
         faculty_days_map.setdefault(fac, set()).update(days)
         for d in days:
             day_count[d] += 1
@@ -1767,7 +1850,7 @@ def build_schedule(
         _record_group_rep(sec.course_number, sec.id, days, t2m(slot.start), t2m(slot.stop))
 
         # ── lab ───────────────────────────────────────────────────────────────
-        if sec.lab_hours > 0:
+        if lab_min > 0:
             if pre_lab_day is not None:
                 # Same-start lab found during assignment — commit it directly.
                 lab_day, lab_slot, lab_room = pre_lab_day, pre_lab_slot, pre_lab_room
@@ -1825,8 +1908,9 @@ def build_schedule(
                 time_sched.book_placeholder([lab_day], lab_slot)
             else:
                 time_sched.book(fac, [lab_day], lab_slot)
-            _lk = _time_key(f"{sec.course_number}-LAB", [lab_day], lab_slot)
-            course_time_count[_lk] = course_time_count.get(_lk, 0) + 1
+                # Placeholders do not count toward C14 (see the lecture above).
+                _lk = _time_key(f"{sec.course_number}-LAB", [lab_day], lab_slot)
+                course_time_count[_lk] = course_time_count.get(_lk, 0) + 1
             faculty_days_map.setdefault(fac, set()).add(lab_day)
             day_count[lab_day] += 1
             if not is_grad(sec.course_number):
@@ -1992,8 +2076,13 @@ class ConstraintChecker:
     """Validates a completed schedule against all scheduling constraints."""
 
     def __init__(self, fac_prefs: Optional[Dict[str, List[str]]] = None,
-                 timeslots: Optional[List[TimeSlot]] = None):
+                 timeslots: Optional[List[TimeSlot]] = None,
+                 course_sections: Optional[Dict[str, int]] = None):
         self.fac_prefs = fac_prefs or {}
+        # {course: total sections offered}, the base a percentage C14 cap is taken
+        # of. Optional: when absent, C14 counts the lectures in the schedule it is
+        # handed, which holds every section placed or not.
+        self.course_sections = dict(course_sections or {})
         # Durations the timetable actually offers — C7 validates against these
         # instead of a hardcoded 75-95 min window, so adding a 70-minute math slot
         # to timings.csv does not make every math lecture look invalid.
@@ -2016,7 +2105,7 @@ class ConstraintChecker:
             (f"C11 ≤ {MAX_CONCURRENT} concurrent sections per time slot", self._c11_concurrency),
             ("C12 Graduate courses start at 6 PM (18:00)",       self._c12_grad_time),
             ("C13 Same faculty for lecture and its lab",        self._c13_lab_faculty),
-            ("C14 ≤ 2 sections of same course at same time",    self._c14_time_dupes),
+            (same_time_label(),                                  self._c14_time_dupes),
             ("C15 Lecture meets its declared days/week",         self._c15_patterns),
             ("C16 Sections balanced across weekdays (≤ 40 %)",  self._c16_balance),
             ("C17 Lab starts at the same time as its lecture",   self._c17_lab_same_start),
@@ -2213,10 +2302,19 @@ class ConstraintChecker:
                 continue
             key = (s.course_number, tuple(sorted(s.days)), t2m(s.start_time), t2m(s.end_time))
             seen[key] = seen.get(key, 0) + 1
+        # Section totals include UNPLACED lectures: the cap is a share of what the
+        # course offers, not of what happened to fit.
+        totals: Dict[str, int] = {}
+        for s in sections.values():
+            if not s.is_lab:
+                totals[s.course_number] = totals.get(s.course_number, 0) + 1
+        totals.update(self.course_sections)
         ok = True
         for (course, days, start, _), n in seen.items():
-            if n > 2:
-                print(f"    {course}: {n} sections at same time on {days} ({start // 60:02d}:{start % 60:02d})")
+            cap = same_time_cap(totals.get(course, n))
+            if n > cap:
+                print(f"    {course}: {n} sections at same time on {days} "
+                      f"({start // 60:02d}:{start % 60:02d}); cap is {cap}")
                 ok = False
         return ok
 
@@ -2677,7 +2775,7 @@ def _run() -> None:
     load_settings(dp("settings.csv"))
     MEETING_RULES  = load_meeting_patterns(dp("meeting_patterns.csv"))
 
-    courses        = load_courses(dp("course-list-Spring 27(Sheet1) (1).csv"))
+    courses        = load_courses(dp("course-list.csv"))
     fac_prefs      = load_faculty_preferences(dp("prof_preferences.csv"))
     timeslots      = load_timeslots(dp("timings.csv"))
     faculty_limits = load_faculty_loads(dp("faculty_load.csv"))
@@ -2717,7 +2815,10 @@ def _run() -> None:
                                     faculty_time_prefs=faculty_tprefs)
 
     print_summary(scheduled, courses, faculty_limits, time_sched.slot_load)
-    ConstraintChecker(fac_prefs, timeslots).run_all(scheduled, faculty_limits)
+    course_sections: Dict[str, int] = {}
+    for s in sections:
+        course_sections[s.course_number] = course_sections.get(s.course_number, 0) + 1
+    ConstraintChecker(fac_prefs, timeslots, course_sections).run_all(scheduled, faculty_limits)
     check_non_overlap_groups(scheduled, overlap_groups, courses)
     export_json(scheduled, courses, os.path.join(base, "schedule.json"))
     export_csv(scheduled, course_titles, os.path.join(base, "schedule.csv"))

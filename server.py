@@ -41,7 +41,7 @@ app.add_middleware(
 
 # ── File slug → filename map ──────────────────────────────────────────────────
 FILE_MAP: Dict[str, str] = {
-    "courses":            "course-list-Spring 27(Sheet1) (1).csv",
+    "courses":            "course-list.csv",
     "preferences":        "prof_preferences.csv",
     "faculty_load":       "faculty_load.csv",
     "timings":            "timings.csv",

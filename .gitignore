@@ -24,7 +24,7 @@ CHANGES_FOR_MIKE.md
 math-test-data/
 
 # Loose input files dropped in the repo root; the app reads data/ only
-/course-list-*.csv
+/course-list*.csv
 /non_overlap_groups*.csv
 
 # Backups the input editor writes next to the file it replaced
@@ -39,3 +39,6 @@ data/*.bak
 complete_csat_scheduler/
 new-copilot-changes/
 data-mike/
+
+# Superseded local files kept for reference only (not part of the app)
+DEPRECATED_*

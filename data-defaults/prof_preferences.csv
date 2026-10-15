@@ -1,85 +1,110 @@
 Course Number,Course Name,Faculty
-COMP1000,Computer Science 1,"Sunjae, Micah, Weijie, Abdullah, Memo, Kene"
-COMP1010,Fundamentals of IT,"Cliff, Abdullah, Irfan, Kene"
-COMP1050,Computer Science 2,"Dave, Yetunde, Micah, Abdullah, Kene"
-COMP1100,Intro to Networks,"Bingyu,  Aspen, Leon, Aspen, Abdullah, Irfan, Cliff"
+AAIN1000,Intro to Applied AI,"Salem, Memo, Weijie, Zaihan"
+AAIN3000,Applications of AI,"Salem, Memo,weijie, Zaihan"
+AAIN3001,Found.of Agentic Prompt Engin.,"Yetunde, Memo "
+AAIN4080,Agentic AI and Intelligent Agents,"Salem, Zaihan"
+AAIN5500,AI Senior Projects,"Memo, Yetunde, Irfan, weijie"
+AAIN5720,Trustworthy Generative AI,"Salem, Bingyu"
+AAIN7001,Foundations of Aritificial Intelligence,"Yetunde, Salem, Frank, Zaihan"
+AAIN7410,Agentic AI Systems,Salem
+AAIN7420,Data Engineering for AI,"Yetunde, Zaihan"
+AAIN7422,Explainable AI,Yetunde
+AAIN7424 ,Intelligent Systems,Yetunde
+AAIN7430,Prompt Engineering,"Yetunde, Memo"
+COMP1000,Computer Science 1,"Sunjae, Weijie, Memo, Kene, Zaihan"
+COMP1010,Fundamentals of IT,"Abdullah, Irfan, Kene, Bingyu"
+COMP1050,Computer Science 2,"Yetunde, Micah, Kene, Zaihan"
+COMP1100,Intro to Networks,"Bingyu, Aspen, Abdullah, Irfan, Cliff, Leon"
 COMP1150,Routing and Switching,"Abdullah, Irfan, Kene"
-COMP1200,Computer Organization,"Sunjae, Abdullah, Irfan, Memo"
-COMP2000,Data Structures,"Frank, Bingyu, Dave, Abdullah"
+COMP1200,Computer Organization,"Sunjae, Irfan, Memo"
+COMP2000,Data Structures,"Frank, Bingyu, Zaihan"
 COMP2010,Systems Analysis & Design,Irfan
-COMP2100,Network Programming,"Aspen,Salem, Cliff, Kene"
+COMP2100,Network Programming,"Aspen,Salem, Cliff, Kene, Leon"
 COMP2150,Network Administration,"Bingyu, Irfan"
 COMP2160,Wireless Networks,Cliff
-COMP2350,Algorithms,"Aspen, Bingyu, Frank, Salem, Memo"
-COMP2500,Security Principles,"Ashar, Bingyu, Abdullah, Irfan, Cliff"
-COMP2540,Ethical Hacking,
-COMP2650,Database,Aspen
-COMP3000,Applications of AI,Memo
-COMP3010,IT SW devel. & Mgmnt.,"Salem, Weijie, Irfan"
+COMP2350,Algorithms,"Aspen, Frank, Salem, Memo, Bingyu, Zaihan"
+COMP2540,Ethical Hacking,"Cliff, Aspen"
+COMP2650,Database,"Aspen, Irfan"
+COMP3010,IT SW devel. & Mgmnt.,"Weijie, Irfan"
 COMP3100,System Administration,"Leon, Ashar"
-COMP3125,Data Science Fundamentals,"Weijie, Fariba"
-COMP3200,Assembly Language,"Abdullah, Memo"
-COMP3220,Data Analytics,"Salem, Weijie, Fariba, Memo"
+COMP3200,Assembly Language,Memo
 COMP3225,Game Development,Micah
 COMP3230,Game Engine Development,Micah
-COMP3350,Programming Languages,"Aspen, Frank, Abdullah, Sunjae"
-COMP3400,Operating Systems,"Aspen, Abdullah, Sunjae, Kene, Irfan, Memo"
+COMP3350,Programming Languages,"Frank, Sunjae"
+COMP3400,Operating Systems,"Sunjae, Memo, Kene"
 COMP3450,Parallel & Distributed Computing,"Micah, Barry"
 COMP3480,Cloud Computing,Aspen
-COMP3500,Network Security,"Abdullah, Irfan, Cliff"
 COMP3510,IoT Security,"Irfan, Cliff"
-COMP3550,Computer Security,"Ashar, Abdullah, Irfan"
-COMP3575,Scripting for Cybersecurity & Forensics,Ashar
-COMP3580,Digital Forensics,Ashar
-COMP3590,Applied Cryptography,"Ashar, Bingyu, Abdullah, Leon, Cliff"
 COMP3600,Software Security,Aspen
 COMP3650,Malware Analysis Basics,"Abdullah, Irfan"
-COMP3660,Mobile App Development,Abdullah
-COMP3800,Special Topics - Software Test,Sunjae
-COMP3801,Special Topics - AI in Software Engineering,Aspen
+COMP3660,Mobile App Development,"Salem, Kene"
+COMP3800,Special Topics ,Sunjae
 COMP4060,Blockchain Technologies,Bingyu
-COMP4150,Adv. Systems Administration,
-COMP4225,Game Design Projects,"Yetunde, Micah"
+COMP4150,Adv. Systems Administration,Ashar
+COMP4225,Game Design Projects,Micah
 COMP4450,Systems Programming,Sunjae
-COMP4460,Compilers,Sunjae
-COMP4500,Offensive Security,"Ashar, Abdullah"
-COMP4550,Incident Response & Business Cont.,Ashar
-COMP4580,Network Forensics,
-COMP4590,Public Key Cryptography,"Bingyu, Leon, Cliff"
+COMP4460,Compilers,"Aspen, Sunjae"
+COMP4580,Network Forensics,Ashar
+COMP4590,Public Key Cryptography,"Bingyu, Cliff, Leon"
 COMP4600,Quantum Computing for Security,Leon
-COMP4650,Web Development,"Aspen, Salem, Abdullah, Irfan, Kene"
+COMP4650,Web Development,"Aspen, Irfan, Kene"
 COMP4700,Artificial Intelligence,Frank
 COMP4725,Big Data Programming,Salem
+COMP4726,Applied Large Language Models,Zaihan
 COMP4750,Embedded AI,"Irfan, Memo"
 COMP4760,Image Processing,Memo
 COMP4770,AI for Gaming,Yetunde
 COMP4775,Adv. Parallel Computing,Micah
-COMP4950,Project Management,"Aspen, Memo, Kene"
-COMP4960,Software Engineering,"Memo, Sunjae, Kene, Aspen"
-COMP5050,Modern Computing,"Salem, Ashar, Leon, Memo"
-COMP5100,Natural Language Processing,"Yetunde, Salem, Memo"
-COMP5500,Senior Project,"Yetunde, Salem, Aspen, Bingyu, Leon, Abdullah, Memo"
-COMP5555,Computer & Network Security,Abdullah
-COMP5600,Foundations of Cybersecurity,"Bingyu, Irfan, Cliff"
-COMP5620,Data Privacy & Security,"Bingyu, Cliff"
-COMP5700,Classical Artificial Intelligence,"Frank, Abdullah, Memo"
-COMP5705,Data Mining,"Salem, Memo"
-COMP5710,Principles of Machine Learning,"Salem, Aspen, Steve, Abdullah, Memo"
+COMP4950,Project Management,"Aspen, Irfan"
+COMP4960,Software Engineering,"Memo, Sunjae, Zaihan"
+COMP5500,Senior Project,"Yetunde, Salem, Aspen, Bingyu, Leon,  Memo, Sunjae"
+COMP5705,Data Mining,"Salem, Memo, Bingyu, Zaihan"
 COMP5750,Embedded AI,Memo
 COMP5775,Adv. Parallel Computing,Micah
-COMP5900,Programming Fundamentals,Micah
-COMP5925,Data Structures & Algorithms,"Salem, Frank"
-COMP6000,Intrusion Det. & Prev. Systems,Abdullah
 COMP6100,Secure Software Development,Aspen
-COMP6420,Reverse Engineering,Abdullah
-COMP6500,Adv. Network Security,Cliff
-COMP6520,Malware Analysis,Abdullah
-COMP6550,Threat Intelligence,Abdullah 
-COMP6580,Digital For. & Incidence Response,Ashar
+COMP6710,Principles of Machine Learning,"Salem, Aspen, Steve, Memo"
+COMP6720,Natural Language Processing,"Yetunde, Salem, Memo, Zaihan"
 COMP6760,Computer Vision,Memo
 COMP6999,Tech. Projects Development,"Yetunde, Memo"
 COMP7025,Sports Analytics,Barry
 COMP7100,Adv. Algorithms,"Salem, Frank"
 COMP7350,Big Data Systems,Salem
-COMP7430,Prompt Engineering,"Yetunde, Memo"
-COMP7431,Adv. Software Engineering,
+COMP7431,Adv. Software Engineering,Aspen
+COMP7700,Classical AI,"Frank, Abdullah, Memo"
+COMP7800,Grad Special Topics,
+CYBR2500,Security Principles,"Ashar, Abdullah, Irfan, Cliff, Bingyu"
+CYBR3500,Network Security,"Abdullah, Irfan, Cliff"
+CYBR3550,Computer Security,"Ashar, Abdullah, Irfan"
+CYBR3575,Scripting for Cybersecurity & Forensics,"Ashar, Leon"
+CYBR3580,Digital Forensics,"Ashar, Irfan"
+CYBR3590,Applied Cryptography,"Ashar, Bingyu, Abdullah, Cliff, Leon"
+CYBR4500,Offensive Security,"Ashar, Abdullah"
+CYBR4550,Incident Response & Business Cont.,Ashar
+CYBR5500,Cyber Senior Project,"Ashar, Cliff, Abdullah, Bingyu, Irfan"
+CYBR5510,Windows Forensics Investigation,Ashar
+CYBR5520,Memory Forensics in Windows,Ashar
+CYBR5555,Computer & Network Security,Abdullah
+CYBR5600,Foundations of Cybersecurity,"Bingyu, Irfan, Cliff, Ashar"
+CYBR5620,Data Privacy & Security,"Bingyu, Cliff"
+CYBR5730,Secure Computation,Abdullah
+CYBR5740,Adversarial Robustness in ML,Bingyu
+CYBR6000,Intrusion Det. & Prev. Systems,Abdullah
+CYBR6420,Reverse Engineering,Abdullah
+CYBR6500,Adv. Network Security,Cliff
+CYBR6520,Malware Analysis,Abdullah
+CYBR6550,Threat Intelligence,Abdullah 
+CYBR6580,Digital For. & Incidence Response,Ashar
+DATA1000,Data Analysis,"Salem, Memo, weijie, Zaihan"
+DATA3010,Data Mining,"Salem, weijie, Zaihan"
+DATA3125,Data Science Fundamentals,"Weijie, Fariba, Memo, Zaihan"
+DATA3220,Data Analytics,"Salem, weijie"
+DATA3333,Practical Deep Learning,"Salem, Memo, Weijie, Zaihan"
+DATA5500,Senior Design,"Weijie, Mark, Memo"
+DATA6000,Applied Statistics for Research,"Weijie, Ying, Youssef"
+DATA6100,Data Visualization,"Fariba, Weijie"
+DATA6150,Data Science Foundations,"Salem, Weijie, Fariba, Memo, Zaihan"
+DATA6200,Data Management,"Aspen, Weijie"
+DATA6250,ML for Data Science,"Steve, Salem, Memo, Zaihan"
+DATA6300,Advanced Topics in Large Language Models,"Salem, Memo, Bingyu, Zaihan"
+DATA6710,Applied Deep Learning,"Salem, Memo, Bingyu, Zaihan"
+DATA7800,Data Special Topics,
